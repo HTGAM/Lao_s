@@ -1,7 +1,8 @@
 // State Management
 let appState = {
   selectedSign: null,
-  activeLang: 'en',
+  activeLang: 'lo',
+  globalLang: 'ko',
   systemPrompt: `You are a multilingual traffic safety guide for foreign tourists in Korea and Laos.
 
 When analyzing a traffic sign, always respond in this exact format:
@@ -23,7 +24,14 @@ Rules:
   isSpeaking: false,
   speechUtterance: null,
   ocrWorker: null,
-  isAutoScanActive: false
+  isAutoScanActive: false,
+  
+  // New Interactive States
+  activeTab: 'scan',       // 'scan' | 'map'
+  weather: 'clear',        // 'clear' | 'nightrain'
+  isGpsSimulating: false,
+  gpsInterval: null,
+  carPositionIndex: 0
 };
 
 // Default Prompt Templates for Demo
@@ -100,10 +108,8 @@ function playWarningSound(dangerLevel) {
     const ctx = new AudioContext();
     
     if (dangerLevel === 'high') {
-      // Play a double siren alarm
       const now = ctx.currentTime;
       
-      // Tone 1
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
       osc1.type = 'sine';
@@ -118,7 +124,6 @@ function playWarningSound(dangerLevel) {
       osc1.start(now);
       osc1.stop(now + 0.3);
       
-      // Tone 2 (delayed)
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.type = 'sine';
@@ -133,7 +138,6 @@ function playWarningSound(dangerLevel) {
       osc2.start(now + 0.25);
       osc2.stop(now + 0.55);
     } else if (dangerLevel === 'medium') {
-      // Play a single alert chime
       const now = ctx.currentTime;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -148,6 +152,21 @@ function playWarningSound(dangerLevel) {
       gain.connect(ctx.destination);
       osc.start(now);
       osc.stop(now + 0.4);
+    } else if (dangerLevel === 'low') {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(659.25, now); // E5
+      osc.frequency.setValueAtTime(880, now + 0.1);
+      
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.25);
     }
   } catch (e) {
     console.error("Audio Context Error:", e);
@@ -155,57 +174,703 @@ function playWarningSound(dangerLevel) {
 }
 
 // AI Translation / Simulation Engine
-// Generates variations of the translations based on the system prompt text and temperature.
 function simulateAITranslation(sign, lang, promptText, temp) {
   const base = sign.translations[lang] || sign.translations['en'];
-  
-  // Detect styling keywords in user's prompt
+
   const isStrict = promptText.toLowerCase().match(/(strict|emergency|alert|warn|caps|위험|경고|강력|긴급)/);
   const isFriendly = promptText.toLowerCase().match(/(friendly|warm|guide|emoji|친절|환영|아이|쉽게)/);
   const isSimple = promptText.toLowerCase().match(/(simple|short|brief|bullet|요약|간단)/);
-  
+
   let title = base.title;
   let meaning = base.meaning;
   let instruction = base.instruction;
   let penalty = base.penalty;
-  
-  // Simple style variation algorithm representing LLM execution
+
+  const LABELS = {
+    en: {
+      danger:    'DANGER',
+      critWarn:  'CRITICAL WARNING',
+      immediate: 'IMMEDIATE ACTION REQUIRED',
+      noViolate: 'DO NOT UNDER ANY CIRCUMSTANCES VIOLATE THIS RULE.',
+      absolute:  'ABSOLUTE PROHIBITION. PENALTY',
+      friendlyTip: 'Friendly Tips',
+      safeTip:   'Please stay safe and enjoy your walk!',
+      keepMind:  'Keep in mind',
+      safeWish:  'We want you to stay safe!',
+      quickRule: '• Quick rule: Stop & check.',
+      avoidFine: '• Avoid fine',
+    },
+    lo: {
+      danger:    'ອັນຕະລາຍ',
+      critWarn:  'ຄຳເຕືອນສຳຄັນ',
+      immediate: 'ຕ້ອງດຳເນີນການທັນທີ',
+      noViolate: 'ຫ້າມລະເມີດກົດລະບຽບນີ້ໂດຍເດັດຂາດ.',
+      absolute:  'ຫ້າມຢ່າງເດັດຂາດ. ຄ່າປັບ',
+      friendlyTip: 'ຄຳແນະນຳ',
+      safeTip:   'ກະລຸນາລະວັງຕົວ ແລະ ເດີນທາງໂດຍສະດວກ!',
+      keepMind:  'ຈຳໄວ້ວ່າ',
+      safeWish:  'ພວກເຮົາຢາກໃຫ້ທ່ານປອດໄພ!',
+      quickRule: '• ກົດລະບຽບໄວ: ຢຸດ ແລະ ກວດສອບ.',
+      avoidFine: '• ຫຼີກລ້ຽງຄ່າປັບ',
+    },
+    zh: {
+      danger:    '危险',
+      critWarn:  '严重警告',
+      immediate: '需要立即采取行动',
+      noViolate: '任何情况下都不得违反此规定。',
+      absolute:  '绝对禁止。罚款',
+      friendlyTip: '友情提示',
+      safeTip:   '请注意安全，祝您旅途愉快！',
+      keepMind:  '请记住',
+      safeWish:  '我们希望您平安！',
+      quickRule: '• 快速规则：停下并检查。',
+      avoidFine: '• 避免罚款',
+    },
+    ja: {
+      danger:    '危険',
+      critWarn:  '重大警告',
+      immediate: '直ちに行動が必要',
+      noViolate: 'いかなる状況でもこのルールを違反しないでください。',
+      absolute:  '絶対禁止。罰金',
+      friendlyTip: 'フレンドリーアドバイス',
+      safeTip:   '安全に気をつけて、旅をお楽しみください！',
+      keepMind:  '覚えておいてください',
+      safeWish:  '皆さんの安全を願っています！',
+      quickRule: '• 簡単ルール：止まって確認。',
+      avoidFine: '• 罰金を避ける',
+    }
+  };
+
+  const L = LABELS[lang] || LABELS['en'];
+
   if (isStrict) {
-    title = `🚨 DANGER: ${title.toUpperCase()} 🚨`;
-    meaning = `CRITICAL WARNING: ${meaning.toUpperCase()}`;
-    instruction = `⚠️ IMMEDIATE ACTION REQUIRED: ${instruction.toUpperCase()} DO NOT UNDER ANY CIRCUMSTANCES VIOLATE THIS RULE.`;
-    penalty = `🔴 ABSOLUTE PROHIBITION. PENALTY: ${penalty.toUpperCase()}`;
+    title       = `🚨 ${L.danger}: ${title.toUpperCase()} 🚨`;
+    meaning     = `${L.critWarn}: ${meaning.toUpperCase()}`;
+    instruction = `⚠️ ${L.immediate}: ${instruction.toUpperCase()} ${L.noViolate}`;
+    penalty     = `🔴 ${L.absolute}: ${penalty.toUpperCase()}`;
   } else if (isFriendly) {
-    const emojis = {
-      en: "👋 Hello traveler! 🚦",
-      lo: "ສະບາຍດີນັກທ່ອງທ່ຽວ! 🚦",
-      zh: "你好旅行者！🚦",
-      ja: "観光客の皆さん、こんにちは！🚦"
+    const greetings = {
+      en: '👋 Hello traveler! 🚦',
+      lo: 'ສະບາຍດີນັກທ່ອງທ່ຽວ! 🚦',
+      zh: '你好旅行者！🚦',
+      ja: '観光客の皆さん、こんにちは！🚦'
     };
-    const localEmoji = emojis[lang] || emojis['en'];
-    title = `✨ ${localEmoji} ${title} ✨`;
-    meaning = `😊 Friendly Tips: ${meaning}`;
-    instruction = `💡 ${instruction} Please stay safe and enjoy your walk!`;
-    penalty = `⚠️ Keep in mind: ${penalty} (We want you to stay safe!)`;
+    const localGreeting = greetings[lang] || greetings['en'];
+    title       = `✨ ${localGreeting} ${title} ✨`;
+    meaning     = `😊 ${L.friendlyTip}: ${meaning}`;
+    instruction = `💡 ${instruction} ${L.safeTip}`;
+    penalty     = `⚠️ ${L.keepMind}: ${penalty} (${L.safeWish})`;
   } else if (isSimple) {
-    title = `📍 ${title}`;
-    meaning = meaning;
-    instruction = `• Quick rule: Stop & check.`;
-    penalty = `• Avoid fine: ${penalty.split('.')[0]}.`;
+    title       = `📍 ${title}`;
+    meaning     = meaning;
+    instruction = L.quickRule;
+    penalty     = `${L.avoidFine}: ${penalty.split('.')[0]}.`;
   }
-  
+
+  // Weather safety guidance injection
+  if (appState.weather === 'nightrain' && base.weatherAdvice) {
+    instruction = `${instruction}\n\n${base.weatherAdvice}`;
+  }
+
   // Apply visual randomness simulation based on Temperature
   if (temp > 0.8) {
     const randomness = {
-      en: " [AI Confidence: Dynamic Mode]",
-      lo: " [AI ໂໝດປັບປ່ຽນ]",
-      zh: " [AI 动态调节模式]",
-      ja: " [AI 動的調整モード]"
+      en: ' [AI Confidence: Dynamic Mode]',
+      lo: ' [AI ໂໝດປັບປ່ຽນ]',
+      zh: ' [AI 动态调节模式]',
+      ja: ' [AI 動的調整モード]'
     };
-    instruction += randomness[lang] || "";
+    instruction += randomness[lang] || '';
+  }
+
+  return { title, meaning, instruction, penalty };
+}
+
+// --- Language-specific Phone UI Labels ---
+const PHONE_UI_TRANSLATIONS = {
+  ko: {
+    appTitle: 'AI 안전 가이드',
+    appSubtitle: '한-라오 및 다국어 교통 표지판 안내',
+    uploadTitle: '탭하여 표지판 이미지 업로드',
+    uploadDesc: '또는 카메라를 열어 표지판을 스캔하세요',
+    openCamera: '카메라 열기',
+    closeCamera: '카메라 닫기',
+    autoScanOff: '⚡ 자동 스캔: OFF',
+    autoScanOn: '⚡ 자동 스캔: ON',
+    demoPresets: '데모 프리셋 (빠른 스캔)',
+    testSigns: '표지판 테스트',
+    standby: '대기 중 (아래 표지판을 클릭하여 테스트)',
+    connectingCamera: '카메라 연결 중...',
+    cameraActive: '카메라 작동 중 (스캔 중...)',
+    cameraFailed: '카메라 작동 실패. 업로드 또는 프리셋을 이용해 주세요.',
+    autoScanDeactivated: '자동 스캔이 비활성화되었습니다.',
+    autoScanListening: '자동 스캔: 활성 (스캔 대기 중...)',
+    autoScanDetected: '자동 스캔: 감지됨',
+    processingImage: '이미지 처리 중...',
+    analyzingText: 'AI가 표지판 텍스트를 분석 중...',
+    scannerCompleted: 'AI 스캔 완료 (시뮬레이션 OCR)',
+    scannerMatched: 'AI 스캐너 일치 완료',
+    noSignDetected: '명확한 교통 표지판이 감지되지 않았습니다. 다른 사진으로 시도해 주세요.',
+    scannerOffline: 'AI 스캐너 오프라인. 자동 시뮬레이션으로 전환되었습니다.',
+    aiReadyTraining: 'AI 준비 완료. 기본 형상 자동 학습 중...',
+    baseModelTrained: 'AI 기본 모델 학습 성공!',
+    trainedWebcamFrame: '웹캠 프레임 1개 학습 완료: 클래스 ',
+    loadingActualPhotos: 'AI가 실제 교통 표지판 사진 데이터셋을 로드 중...',
+    actualPhotosComplete: '실제 사진 학습 완료! AI 비전 인식이 개선되었습니다.',
+    trainingFailed: '학습 실패. 다시 시도해 주세요.',
+    highDanger: '⚠️ 고위험',
+    warning: '⚡ 경고',
+    lowRisk: '✓ 저위험',
+    ocrRaw: 'OCR 원본 텍스트',
+    assistant: '안내 도우미',
+    chatTitle: '💬 AI 안전 도우미 Q&A',
+    chatPlaceholder: '질문을 입력하세요...',
+    gpsActive: 'GPS 활성: 서울 안전 구역',
+    envLabel: '기상 환경 필터:',
+    btnClear: '☀️ 맑음',
+    btnNightRain: '🌧️ 야간 및 우천',
+    gpsSimStart: '🚗 주행 시뮬레이션 시작',
+    gpsSimStop: '🛑 주행 시뮬레이션 중지',
+    tapOcrScan: '탭하여 표지판 OCR 스캔',
+    visionAiDetected: '비전 AI: 감지됨',
+    confidence: '신뢰도'
+  },
+  en: {
+    appTitle: 'AI Safety Guide',
+    appSubtitle: 'KOREAN TO LAO & MULTILINGUAL SIGN GUIDE',
+    uploadTitle: 'Tap to Upload Sign Image',
+    uploadDesc: 'Or open camera and scan signs',
+    openCamera: 'Open Camera',
+    closeCamera: 'Close Camera',
+    autoScanOff: '⚡ Auto Scan: OFF',
+    autoScanOn: '⚡ Auto Scan: ON',
+    demoPresets: 'Demo Presets (Quick Scan)',
+    testSigns: 'Test signs',
+    standby: 'Standby (Click sign below to test)',
+    connectingCamera: 'Connecting camera...',
+    cameraActive: 'Camera Active (Scanning...)',
+    cameraFailed: 'Camera failed. Please upload or use presets.',
+    autoScanDeactivated: 'Auto Scan deactivated.',
+    autoScanListening: 'Auto Scan: Active (Listening...)',
+    autoScanDetected: 'Auto Scan: Detected',
+    processingImage: 'Processing Image...',
+    analyzingText: 'AI analyzing sign text...',
+    scannerCompleted: 'AI Scanner completed (Simulated OCR)',
+    scannerMatched: 'AI Scanner matched',
+    noSignDetected: 'No clear traffic sign detected. Try another photo.',
+    scannerOffline: 'AI Scanner offline. Reverted to automatic simulation.',
+    aiReadyTraining: 'AI ready. Auto-training base shapes...',
+    baseModelTrained: 'AI base model trained successfully!',
+    trainedWebcamFrame: 'Trained 1 webcam frame for class',
+    loadingActualPhotos: 'AI loading actual traffic sign photos dataset...',
+    actualPhotosComplete: 'Actual Photos Training Complete! AI vision improved.',
+    trainingFailed: 'Training failed. Please retry.',
+    highDanger: '⚠️ High Danger',
+    warning: '⚡ Warning',
+    lowRisk: '✓ Low Risk',
+    ocrRaw: 'OCR Raw Text',
+    assistant: 'Assistant',
+    chatTitle: '💬 AI Safety Assistant Q&A',
+    chatPlaceholder: 'Ask a question...',
+    gpsActive: 'GPS ACTIVE: SEOUL SAFETY AREA',
+    envLabel: 'Environment Filter:',
+    btnClear: '☀️ Clear',
+    btnNightRain: '🌧️ Night & Rain',
+    gpsSimStart: '🚗 Start Driving Simulation',
+    gpsSimStop: '🛑 Stop Driving Simulation',
+    tapOcrScan: 'Tap to OCR Scan Sign',
+    visionAiDetected: 'Vision AI: Detected',
+    confidence: 'confidence'
+  },
+  lo: {
+    appTitle: 'AI ຄູ່ມືຄວາມປອດໄພ',
+    appSubtitle: 'ຄູ່ມືປ້າຍຈະລາຈອນ ເກົາຫຼີ-ລາວ',
+    uploadTitle: 'ແຕະເພື່ອອັບໂຫຼດຮູບປ້າຍຈະລາຈອນ',
+    uploadDesc: 'ຫຼື ເປີດກ້ອງຖ່າຍຮູບເພື່ອສະແກນປ້າຍ',
+    openCamera: 'ເປີດກ້ອງຖ່າຍຮູບ',
+    closeCamera: 'ປິດກ້ອງຖ່າຍຮູບ',
+    autoScanOff: '⚡ ສະແກນອັດຕະໂນມັດ: ປິດ',
+    autoScanOn: '⚡ ສະແກນອັດຕະໂນມັດ: ເປີດ',
+    demoPresets: 'ຕົວຢ່າງປ້າຍຈະລາຈອນ',
+    testSigns: 'ທົດສອບປ້າຍ',
+    standby: 'ກຽມພ້ອມ (ຄລິກປ້າຍດ້ານລຸ່ມເພື່ອທົດສອບ)',
+    connectingCamera: 'ກຳລັງເຊື່ອມຕໍ່ກ້ອງ...',
+    cameraActive: 'ກ້ອງເຮັດວຽກແລ້ວ (ກຳລັງສະແກນ...)',
+    cameraFailed: 'ກ້ອງບໍ່ສາມາດເຮັດວຽກໄດ້. ກະລຸນາອັບໂຫຼດຮູບ ຫຼື ໃຊ້ປ້າຍຕົວຢ່າງ.',
+    autoScanDeactivated: 'ປິດການສະແກນອັດຕະໂນມັດແລ້ວ.',
+    autoScanListening: 'ສະແກນອັດຕະໂນມັດ: ເປີດໃຊ້ງານ (ກຳລັງກວດສອບ...)',
+    autoScanDetected: 'ສະແກນອັດຕະໂນມັດ: ກວດພົບ',
+    processingImage: 'ກຳລັງປະມວນຜົນຮູບພາບ...',
+    analyzingText: 'AI ກຳລັງວິເຄາະຂໍ້ຄວາມໃນປ້າຍ...',
+    scannerCompleted: 'ການສະແກນ AI ເສັດສົມບູນ (ຈຳລອງ OCR)',
+    scannerMatched: 'AI ສະແກນພົບປ້າຍ',
+    noSignDetected: 'ກວດບໍ່ພົບປ້າຍຈະລາຈອນທີ່ຊັດເຈນ. ກະລຸນາລອງຮູບອື່ນ.',
+    scannerOffline: 'AI ສະແກນເນີອອຟລາຍ. ປ່ຽນເປັນການຈຳລອງອັດຕະໂນມັດ.',
+    aiReadyTraining: 'AI ພ້ອມແລ້ວ. ກຳລັງຝຶກອົບຮົມຮູບແບບພື້ນຖານ...',
+    baseModelTrained: 'ຝຶກອົບຮົມຮູບແບບພື້ນຖານ AI ເສັດສົມບູນ!',
+    trainedWebcamFrame: 'ຝຶກອົບຮົມ 1 ເຟຣມເວັບແຄມສຳລັບຄລາສ',
+    loadingActualPhotos: 'AI ກຳລັງໂຫຼດຊຸດຂໍ້ມູນຮູບພາບປ້າຍຈະລາຈອນຕົວຈິງ...',
+    actualPhotosComplete: 'ຝຶກອົບຮົມຮູບພາບຕົວຈິງເສັດສົມບູນ! ຄວາມສາມາດ AI ດີຂຶ້ນ.',
+    trainingFailed: 'ການຝຶກອົບຮົມຫຼົ້ມເຫຼວ. ກະລຸນາລອງໃໝ່.',
+    highDanger: '⚠️ ອັນຕະລາຍສູງ',
+    warning: '⚡ ຄຳເຕືອນ',
+    lowRisk: '✓ ຄວາມສ່ຽງຕ່ຳ',
+    ocrRaw: 'ຂໍ້ຄວາມ OCR ດິບ',
+    assistant: 'ຜູ້ຊ່ວຍສຽງ',
+    chatTitle: '💬 ຜູ້ຊ່ວຍຄວາມປອດໄພ AI Q&A',
+    chatPlaceholder: 'ຖາມຄຳຖາມ...',
+    gpsActive: 'ລະບົບ GPS: ເຂດຄວາມປອດໄພໂຊນ',
+    envLabel: 'ຕົວຕອງສະພາບແວດລ້ອມ:',
+    btnClear: '☀️ ແຈ້ງດີ',
+    btnNightRain: '🌧️ ກາງຄືນ & ຝົນຕົກ',
+    gpsSimStart: '🚗 ເລີ່ມການຈຳລອງການຂັບຂີ່',
+    gpsSimStop: '🛑 ຢຸດການຈຳລອງການຂັບຂີ່',
+    tapOcrScan: 'ແຕະເພື່ອສະແກນ OCR ປ້າຍ',
+    visionAiDetected: 'Vision AI: ກວດພົບ',
+    confidence: 'ຄວາມໝັ້ນໃຈ'
+  },
+  zh: {
+    appTitle: 'AI 安全指南',
+    appSubtitle: '韩中/多语种交通标志指南',
+    uploadTitle: '点击上传标志图片',
+    uploadDesc: '或打开相机进行扫描',
+    openCamera: '打开相机',
+    closeCamera: '关闭相机',
+    autoScanOff: '⚡ 自动扫描: 关闭',
+    autoScanOn: '⚡ 自动扫描: 开启',
+    demoPresets: '演示预设（快速测试）',
+    testSigns: '测试标志',
+    standby: '待机中（点击下方标志进行测试）',
+    connectingCamera: '正在连接相机...',
+    cameraActive: '相机已启动（扫描中...）',
+    cameraFailed: '相机启动失败。请上传图片或使用预设。',
+    autoScanDeactivated: '自动扫描已停用。',
+    autoScanListening: '自动扫描：已启用（侦听中...）',
+    autoScanDetected: '自动扫描：已检测到',
+    processingImage: '正在处理图片...',
+    analyzingText: 'AI 正在分析标志文本...',
+    scannerCompleted: 'AI 扫描完成（模拟 OCR）',
+    scannerMatched: 'AI 扫描匹配成功',
+    noSignDetected: '未检测到清晰的交通标志。请换张照片重试。',
+    scannerOffline: 'AI 扫描器离线。已切换为模拟模式。',
+    aiReadyTraining: 'AI 已准备就绪。正在自动训练基础模型...',
+    baseModelTrained: 'AI 基础模型训练成功！',
+    trainedWebcamFrame: '已训练1个网络摄像头帧',
+    loadingActualPhotos: 'AI 正在加载真实交通标志照片数据集...',
+    actualPhotosComplete: '真实照片训练完成！AI 视觉识别率已提升。',
+    trainingFailed: '训练失败。请重试。',
+    highDanger: '⚠️ 高度危险',
+    warning: '⚡ 警告',
+    lowRisk: '✓ 低风险',
+    ocrRaw: 'OCR 原始文本',
+    assistant: '助手',
+    chatTitle: '💬 AI 安全助手 Q&A',
+    chatPlaceholder: '提问...',
+    gpsActive: 'GPS 激活：首尔安全区域',
+    envLabel: '环境过滤器：',
+    btnClear: '☀️ 晴朗',
+    btnNightRain: '🌧️ 雨夜模式',
+    gpsSimStart: '🚗 开始驾驶模拟',
+    gpsSimStop: '🛑 停止驾驶模拟',
+    tapOcrScan: '点击进行 OCR 扫描标志',
+    visionAiDetected: '智能视觉：已检测到',
+    confidence: '置信度'
+  },
+  ja: {
+    appTitle: 'AI 安全ガイド',
+    appSubtitle: '韓国語-日本語・多言語交通標識ガイド',
+    uploadTitle: 'タップして標識画像をアップロード',
+    uploadDesc: 'またはカメラを起動してスキャン',
+    openCamera: 'カメラを起動',
+    closeCamera: 'カメラを閉じる',
+    autoScanOff: '⚡ 自動スキャン: OFF',
+    autoScanOn: '⚡ 自動スキャン: ON',
+    demoPresets: 'デモ用プリセット (クイックテスト)',
+    testSigns: '標識をテスト',
+    standby: '待機中 (下の標識をクリックしてテスト)',
+    connectingCamera: 'カメラに接続中...',
+    cameraActive: 'カメラ起動中 (スキャン中...)',
+    cameraFailed: 'カメラの起動に失敗しました。アップロードするかプリセットを使用してください。',
+    autoScanDeactivated: '自動スキャンを停止しました。',
+    autoScanListening: '自動スキャン: 有効 (スキャン中...)',
+    autoScanDetected: '自動スキャン: 検出',
+    processingImage: '画像を処理中...',
+    analyzingText: 'AI가 標識의 文字를 分析中...',
+    scannerCompleted: 'AIスキャン完了 (シミュレートOCR)',
+    scannerMatched: 'AIスキャン一致',
+    noSignDetected: '交通標識が検出されませんでした。別の写真でお試しください。',
+    scannerOffline: 'AIスキャナーオフライン。シミュレーションに戻りました。',
+    aiReadyTraining: 'AI準備完了。基本図形を自動トレーニング中...',
+    baseModelTrained: 'AI基本モデルのトレーニングが完了しました！',
+    trainedWebcamFrame: 'ウェブカメラフレームを1つ学習しました',
+    loadingActualPhotos: 'AI가 実際の標識写真データセットをロード中...',
+    actualPhotosComplete: '実際の写真トレーニング完了！AI画像認識が向上しました。',
+    trainingFailed: 'トレーニング失敗。再試行してください。',
+    highDanger: '⚠️ 高度な危険',
+    warning: '⚡ 警告',
+    lowRisk: '✓ 低リスク',
+    ocrRaw: 'OCR 原文テキスト',
+    assistant: 'アシスタント',
+    chatTitle: '💬 AI安全アシスタント Q&A',
+    chatPlaceholder: '質問を入力...',
+    gpsActive: 'GPS有効：ソウル安全区域',
+    envLabel: '環境フィルター：',
+    btnClear: '☀️ 晴天',
+    btnNightRain: '🌧️ 雨天・夜間',
+    gpsSimStart: '🚗 運転シミュレーション開始',
+    gpsSimStop: '🛑 運転シミュレーション停止',
+    tapOcrScan: 'タップして標識を OCR スキャン',
+    visionAiDetected: '画像認識AI：検出',
+    confidence: '信頼度'
+  }
+};
+
+// Update all phone application visual strings based on target language
+function updatePhoneUI() {
+  const lang = appState.activeLang;
+  const ui = PHONE_UI_TRANSLATIONS[lang] || PHONE_UI_TRANSLATIONS['en'];
+  
+  // App Title & Subtitle
+  const appTitle = document.getElementById('app-title');
+  if (appTitle) appTitle.textContent = ui.appTitle;
+  const subtitle = document.querySelector('header .subtitle');
+  if (subtitle) subtitle.textContent = ui.appSubtitle;
+  
+  // Scanner Placeholder Text
+  if (!appState.selectedSign) {
+    const uploadTitle = document.querySelector('#scanner-placeholder span');
+    const uploadDesc = document.querySelector('#scanner-placeholder p');
+    if (uploadTitle) uploadTitle.textContent = ui.uploadTitle;
+    if (uploadDesc) uploadDesc.textContent = ui.uploadDesc;
+  } else {
+    const uploadTitle = document.querySelector('#scanner-placeholder span');
+    const uploadDesc = document.querySelector('#scanner-placeholder p');
+    if (uploadTitle) uploadTitle.textContent = appState.selectedSign.name;
+    if (uploadDesc) uploadDesc.textContent = ui.tapOcrScan;
   }
   
-  return { title, meaning, instruction, penalty };
+  // Camera Toggle Button Text
+  const cameraBtn = document.getElementById('camera-toggle-btn');
+  if (cameraBtn) {
+    const isCameraActive = appState.isCameraActive;
+    const btnText = isCameraActive ? ui.closeCamera : ui.openCamera;
+    const svgIcon = isCameraActive ? 
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M15 8a.5.5 0 0 0-.5-.5H1.5a.5.5 0 0 0 0 1h13A.5.5 0 0 0 15 8z"/>
+      </svg>` :
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M10.5 8.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
+        <path d="M2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 1 3.172 4H2zm.5 2a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1zm9 2.5a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0z"/>
+      </svg>`;
+    cameraBtn.innerHTML = `${svgIcon} ${btnText}`;
+  }
+  
+  // Auto Scan Button Text
+  const autoScanBtn = document.getElementById('auto-scan-btn');
+  if (autoScanBtn) {
+    autoScanBtn.textContent = appState.isAutoScanActive ? ui.autoScanOn : ui.autoScanOff;
+  }
+  
+  // Demo Presets Section
+  const presetsLabelSpan = document.querySelector('.presets-section .section-label span:first-child');
+  const presetsInfoSpan = document.querySelector('.presets-section .section-label span:last-child');
+  if (presetsLabelSpan) presetsLabelSpan.textContent = ui.demoPresets;
+  if (presetsInfoSpan) presetsInfoSpan.textContent = ui.testSigns;
+
+  // Translate Chatbot and GPS / Env elements
+  const chatTitle = document.getElementById('chat-title');
+  if (chatTitle) chatTitle.textContent = ui.chatTitle;
+  
+  const chatInput = document.getElementById('chat-input');
+  if (chatInput) chatInput.placeholder = ui.chatPlaceholder;
+  
+  const hudLabel = document.getElementById('hud-label-text');
+  if (hudLabel) hudLabel.textContent = ui.gpsActive;
+  
+  const envLabel = document.getElementById('env-label-text');
+  if (envLabel) envLabel.textContent = ui.envLabel;
+  
+  const btnClear = document.getElementById('btn-env-clear');
+  if (btnClear) btnClear.textContent = ui.btnClear;
+  
+  const btnNightRain = document.getElementById('btn-env-nightrain');
+  if (btnNightRain) btnNightRain.textContent = ui.btnNightRain;
+  
+  const btnGpsSim = document.getElementById('btn-gps-simulate');
+  if (btnGpsSim) {
+    btnGpsSim.textContent = appState.isGpsSimulating ? ui.gpsSimStop : ui.gpsSimStart;
+  }
+}
+
+// --- Global UI Translations for Dashboard & Outer Elements ---
+const GLOBAL_UI_TRANSLATIONS = {
+  ko: {
+    consoleTitle: '⚙ AI 프롬프트 엔지니어링 콘솔',
+    modifySystemPrompt: '시스템 프롬프트 (지시어) 수정',
+    resetBtn: '초기화',
+    promptPlaceholder: '여기에 안전 지침 및 어조 요구사항을 설정하세요...',
+    strictBtn: '🚨 엄격한 경고 어조',
+    friendlyBtn: '😊 친절한 관광 가이드',
+    laoBtn: '🇱🇦 라오어 집중 모드',
+    tempLabel: 'LLM 온도 (창의성 지수)',
+    tempMuted: '낮은 온도 = 안정적이고 일관됨',
+    visionLabTitle: 'AI 비전 트레이닝 랩 (학습 제어소)',
+    mlLoading: 'ML 로딩 중...',
+    mlStatus: 'MobileNet 상태:',
+    selectTargetClass: '학습 대상 표지판 클래스 선택',
+    trainWebcamBtn: '📸 웹캠 프레임 학습',
+    trainDatasetBtn: '🚀 실제 사진 학습',
+    inferenceLabel: 'AI 비전 추론 결과:',
+    waitingTraining: '학습 대기 중...',
+    countStop: '일시정지:',
+    countNoEntry: '진입금지:',
+    countSchoolZone: '어린이보호:',
+    countNoJaywalking: '무단횡단:',
+    countSlowDown: '서행:',
+    countNoBicycle: '자전거금지:',
+    traceLogTitle: '프롬프트 컴파일 실행 로그',
+    traceLogInit: '엔진 초기화 중. 시스템 프롬프트 구문 분석을 실행하기 위해 표지판 스캔을 대기 중...',
+    architectureStackTitle: '앱 아키텍처 스택',
+    feature1Name: '클라이언트 사이드 AI OCR (Tesseract.js)',
+    feature1Desc: '사용자의 브라우저 내에서 직접 실행되는 오프라인 신경망 텍스트 추출 기술.',
+    feature2Name: '동적 프롬프트 컴파일 엔진',
+    feature2Desc: '사용자 지정 시스템 지침에 따라 즉각적으로 안전 분석, 번역 스타일 및 긴급 경고를 조정합니다.',
+    feature3Name: '음성 합성 가이드 (Web Speech API)',
+    feature3Desc: '대상 언어(영어, 중국어, 일본어 등)와 일치하는 기본 음성 합성을 사용하여 번역 내용을 자연스러운 음성으로 변환합니다.',
+    feature4Name: '위험 경고 사이렌 시스템 (Web Audio API)',
+    feature4Desc: '표지판의 위험도 등급에 따라 하드웨어 발진기(Oscillator)를 사용하여 오프라인에서 경고 사이렌을 직접 합성합니다.'
+  },
+  en: {
+    consoleTitle: '⚙ AI Prompt Engineering Console',
+    modifySystemPrompt: 'Modify System Prompt (Instruction)',
+    resetBtn: 'Reset',
+    promptPlaceholder: 'Configure safety guidelines and tone requirements here...',
+    strictBtn: '🚨 Strict Alert Tone',
+    friendlyBtn: '😊 Warm Tour Guide',
+    laoBtn: '🇱🇦 Lao Focus',
+    tempLabel: 'LLM Temperature (Creativity Index)',
+    tempMuted: 'Low temp = stable & reliable',
+    visionLabTitle: 'AI Vision Training Lab (학습 제어소)',
+    mlLoading: 'Loading ML...',
+    mlStatus: 'MobileNet Status:',
+    selectTargetClass: 'SELECT SIGN TARGET CLASS',
+    trainWebcamBtn: '📸 Train Webcam Frame',
+    trainDatasetBtn: '🚀 Train Actual Photos',
+    inferenceLabel: 'AI Vision Inference:',
+    waitingTraining: 'Waiting for Training...',
+    countStop: '일시정지:',
+    countNoEntry: '진입금지:',
+    countSchoolZone: '어린이보호:',
+    countNoJaywalking: '무단횡단:',
+    countSlowDown: '서행:',
+    countNoBicycle: '자전거금지:',
+    traceLogTitle: 'Prompt Compilation Trace Log',
+    traceLogInit: 'Initializing engine. Awaiting sign scan to execute system prompt parsing...',
+    architectureStackTitle: 'App Architecture Stack',
+    feature1Name: 'Client-side AI OCR (Tesseract.js)',
+    feature1Desc: 'Offline neural network text extraction running directly inside the user\'s browser.',
+    feature2Name: 'Dynamic Prompt Compilation Engine',
+    feature2Desc: 'Adjusts safety analysis, translation styles, and emergency alerts instantly based on custom system instructions.',
+    feature3Name: 'Speech Synthesis Guide (Web Speech API)',
+    feature3Desc: 'Converts translations into natural speech using native local voice synthesis matching targets (EN, ZH, JA).',
+    feature4Name: 'Warning Alarm System (Web Audio API)',
+    feature4Desc: 'Synthesizes custom alert sirens offline using hardware oscillators depending on sign hazard ratings.'
+  },
+  lo: {
+    consoleTitle: '⚙ ຄອນໂຊນການກຳນົດຄຳສັ່ງ AI Prompt',
+    modifySystemPrompt: 'ແກ້ໄຂຄຳສັ່ງລະບົບ (Instruction)',
+    resetBtn: 'ຕັ້ງຄ່າໃໝ່',
+    promptPlaceholder: 'ກຳນົດຄ່າແນວທາງຄວາມປອດໄພ ແລະ ໂທນສຽງຢູ່ບ່ອນນີ້...',
+    strictBtn: '🚨 ໂທນເຕືອນໄພເຂັ້ມງວດ',
+    friendlyBtn: '😊 ຜູ້ແນະນຳການທ່ອງທ່ຽວທີ່ເປັນມິດ',
+    laoBtn: '🇱🇦 ເນັ້ນພາສາລາວ',
+    tempLabel: 'ອຸນຫະພູມ LLM (ດັດຊະນີຄວາມຄິດສ້າງສັນ)',
+    tempMuted: 'ອຸນຫະພູມຕ່ຳ = ສະຖຽນ & ເຊື່ອຖືໄດ້',
+    visionLabTitle: 'ຫ້ອງທົດລອງການຝຶກອົບຮົມ AI Vision',
+    mlLoading: 'ກຳລັງໂຫຼດ ML...',
+    mlStatus: 'ສະຖານະ MobileNet:',
+    selectTargetClass: 'ເລືອກຄລາສເປົ້າໝາຍຂອງປ້າຍ',
+    trainWebcamBtn: '📸 ຝຶກອົບຮົມເຟຣມເວັບແຄມ',
+    trainDatasetBtn: '🚀 ຝຶກອົບຮົມຮູບພາບຕົວຈິງ',
+    inferenceLabel: 'ການຄາດຄະເນ AI Vision:',
+    waitingTraining: 'ລໍຖ້າການຝຶກອົບຮົມ...',
+    countStop: 'ຢຸດຊົ່ວຄາວ:',
+    countNoEntry: 'ຫ້າມເຂົ້າ:',
+    countSchoolZone: 'ເຂດໂຮງຮຽນ:',
+    countNoJaywalking: 'ຫ້າມຂ້າມທາງຊະຊາຍ:',
+    countSlowDown: 'ຜ່ອນຄວາມໄວ:',
+    countNoBicycle: 'ຫ້າມລົດຖີບ:',
+    traceLogTitle: 'ບັນທຶກການລວບລວມຄຳສັ່ງ Prompt Trace',
+    traceLogInit: 'ກຳລັງເລີ່ມຕົ້ນລະບົບ. ລໍຖ້າການສະແກນປ້າຍເພື່ອວິເຄາະຄຳສັ່ງລະບົບ...',
+    architectureStackTitle: 'ສະຖາປັດຕະຍະກຳແອັບພລິເຄຊັນ',
+    feature1Name: 'AI OCR ໃນເຄື່ອງຜູ້ໃຊ້ (Tesseract.js)',
+    feature1Desc: 'ການສະກັດເອົາຂໍ້ຄວາມດ້ວຍໂຄງຂ່າຍປະສາດແບບອອຟລາຍທີ່ເຮັດວຽກໂດຍກົງໃນບຣາວເຊີ.',
+    feature2Name: 'ລະບົບລວບລວມຄຳສັ່ງແບບໄດນາມິກ',
+    feature2Desc: 'ປັບປຸງການວິເຄາະຄວາມປອດໄພ, ຮູບແບບການແປ, ແລະການເຕືອນໄພສຸກເສີນໂດຍອີງຕາມຄຳສັ່ງລະບົບ.',
+    feature3Name: 'ຄູ່ມືການສັງເຄາະສຽງ (Web Speech API)',
+    feature3Desc: 'ແປງຂໍ້ຄວາມແປເປັນສຽງເວົ້າທີ່ເປັນທຳມະຊາດໂດຍໃຊ້ການສັງເຄາະສຽງທ້ອງຖິ່ນໃຫ້ກົງກັບເປົ້າໝາຍ.',
+    feature4Name: 'ລະບົບເຕືອນໄພສຽງ (Web Audio API)',
+    feature4Desc: 'ສັງເຄາະສຽງເຕືອນໄພສຸກເສີນແບບອອຟລາຍໂດຍໃຊ້ hardware oscillators ອີງຕາມລະດັບຄວາມອັນຕະລາຍ.'
+  }
+};
+
+function updateGlobalUI() {
+  const lang = appState.globalLang || 'ko';
+  const ui = GLOBAL_UI_TRANSLATIONS[lang] || GLOBAL_UI_TRANSLATIONS['en'];
+
+  // 1. Console title
+  const consoleTitle = document.getElementById('lbl-console-title');
+  if (consoleTitle) consoleTitle.innerHTML = `<span style="color: var(--color-info)">⚙</span> ${ui.consoleTitle}`;
+
+  // 2. Modify prompt title
+  const modPromptTitle = document.getElementById('lbl-modify-prompt-title');
+  if (modPromptTitle) {
+    const svg = modPromptTitle.querySelector('svg');
+    modPromptTitle.innerHTML = '';
+    if (svg) modPromptTitle.appendChild(svg);
+    modPromptTitle.appendChild(document.createTextNode(' ' + ui.modifySystemPrompt));
+  }
+
+  // 3. Reset Button
+  const resetPromptBtn = document.getElementById('btn-reset-prompt');
+  if (resetPromptBtn) resetPromptBtn.textContent = ui.resetBtn;
+
+  // 4. Textarea Placeholder
+  const promptInput = document.getElementById('prompt-input');
+  if (promptInput) promptInput.placeholder = ui.promptPlaceholder;
+
+  // 5. Template buttons
+  const btnStrict = document.getElementById('btn-template-warning');
+  if (btnStrict) btnStrict.textContent = ui.strictBtn;
+  
+  const btnFriendly = document.getElementById('btn-template-friendly');
+  if (btnFriendly) btnFriendly.textContent = ui.friendlyBtn;
+  
+  const btnLao = document.getElementById('btn-template-lao');
+  if (btnLao) btnLao.textContent = ui.laoBtn;
+
+  // 6. Temperature Slider Group
+  const lblTempTitle = document.getElementById('lbl-temp-title');
+  if (lblTempTitle) lblTempTitle.textContent = ui.tempLabel;
+  const lblTempDesc = document.getElementById('lbl-temp-desc');
+  if (lblTempDesc) lblTempDesc.textContent = ui.tempMuted;
+
+  // 7. AI Vision Training Lab Card Title
+  const visionLabTitle = document.getElementById('lbl-vision-lab-title');
+  if (visionLabTitle) {
+    const svg = visionLabTitle.querySelector('svg');
+    visionLabTitle.innerHTML = '';
+    if (svg) visionLabTitle.appendChild(svg);
+    const textSpan = document.createElement('span');
+    textSpan.id = 'lbl-vision-lab-text';
+    textSpan.textContent = ' ' + ui.visionLabTitle;
+    visionLabTitle.appendChild(textSpan);
+  }
+
+  // 8. MobileNet status label prefix
+  const mlStatusPrefix = document.getElementById('lbl-mobilenet-status-prefix');
+  if (mlStatusPrefix) mlStatusPrefix.textContent = ui.mlStatus + ' ';
+
+  // 9. Class Select Label
+  const classSelectLabel = document.getElementById('lbl-select-class-title');
+  if (classSelectLabel) classSelectLabel.textContent = ui.selectTargetClass;
+
+  // 10. Select dropdown option tags
+  const optStop = document.getElementById('opt-stop');
+  if (optStop) optStop.textContent = ui.countStop.replace(':', '') + ' (STOP)';
+  
+  const optNoEntry = document.getElementById('opt-no-entry');
+  if (optNoEntry) optNoEntry.textContent = ui.countNoEntry.replace(':', '') + ' (No Entry)';
+  
+  const optSchool = document.getElementById('opt-school-zone');
+  if (optSchool) optSchool.textContent = ui.countSchoolZone.replace(':', '') + ' (School Zone)';
+  
+  const optJaywalk = document.getElementById('opt-no-jaywalking');
+  if (optJaywalk) optJaywalk.textContent = ui.countNoJaywalking.replace(':', '') + ' (No Jaywalking)';
+  
+  const optSlow = document.getElementById('opt-slow-down');
+  if (optSlow) optSlow.textContent = ui.countSlowDown.replace(':', '') + ' (Slow Down)';
+  
+  const optBicycle = document.getElementById('opt-no-bicycle');
+  if (optBicycle) optBicycle.textContent = ui.countNoBicycle.replace(':', '') + ' (No Bicycles)';
+
+  // 11. Training buttons
+  const btnCapture = document.getElementById('btn-train-capture');
+  if (btnCapture) btnCapture.textContent = ui.trainWebcamBtn;
+  
+  const btnDataset = document.getElementById('btn-train-dataset');
+  if (btnDataset) btnDataset.textContent = ui.trainDatasetBtn;
+
+  // 12. Inference Header
+  const predictTitle = document.getElementById('lbl-vision-predict-res-title');
+  if (predictTitle) predictTitle.textContent = ui.inferenceLabel;
+
+  // 13. Inference waiting placeholder (if not running)
+  const predictRes = document.getElementById('vision-predict-res');
+  if (predictRes && (predictRes.textContent === 'Waiting for Training...' || predictRes.textContent === '학습 대기 중...' || predictRes.textContent === 'ລໍຖ້າການຝຶກອົບຮົມ...')) {
+    predictRes.textContent = ui.waitingTraining;
+  }
+
+  // 14. Count grid labels
+  const lblStop = document.getElementById('lbl-count-stop');
+  if (lblStop) lblStop.textContent = ui.countStop;
+  
+  const lblNoEntry = document.getElementById('lbl-count-no_entry');
+  if (lblNoEntry) lblNoEntry.textContent = ui.countNoEntry;
+  
+  const lblSchool = document.getElementById('lbl-count-school_zone');
+  if (lblSchool) lblSchool.textContent = ui.countSchoolZone;
+  
+  const lblJaywalk = document.getElementById('lbl-count-no_jaywalking');
+  if (lblJaywalk) lblJaywalk.textContent = ui.countNoJaywalking;
+  
+  const lblSlow = document.getElementById('lbl-count-slow_down');
+  if (lblSlow) lblSlow.textContent = ui.countSlowDown;
+  
+  const lblBike = document.getElementById('lbl-count-no_bicycle');
+  if (lblBike) lblBike.textContent = ui.countNoBicycle;
+
+  // 15. Execution Feedback log title
+  const traceLogTitle = document.getElementById('lbl-trace-log-title');
+  if (traceLogTitle) traceLogTitle.textContent = ui.traceLogTitle;
+
+  const traceLogInit = document.getElementById('impact-desc');
+  if (traceLogInit && (traceLogInit.textContent.includes('Initializing engine') || traceLogInit.textContent.includes('엔진 초기화 중') || traceLogInit.textContent.includes('ກຳລັງເລີ່ມຕົ້ນລະບົບ'))) {
+    traceLogInit.textContent = ui.traceLogInit;
+  }
+
+  // 16. App Architecture section
+  const archTitle = document.getElementById('lbl-architecture-title');
+  if (archTitle) archTitle.textContent = ui.architectureStackTitle;
+
+  const feat1Name = document.getElementById('lbl-feat1-name');
+  if (feat1Name) feat1Name.textContent = ui.feature1Name;
+  const feat1Desc = document.getElementById('lbl-feat1-desc');
+  if (feat1Desc) feat1Desc.textContent = ui.feature1Desc;
+
+  const feat2Name = document.getElementById('lbl-feat2-name');
+  if (feat2Name) feat2Name.textContent = ui.feature2Name;
+  const feat2Desc = document.getElementById('lbl-feat2-desc');
+  if (feat2Desc) feat2Desc.textContent = ui.feature2Desc;
+
+  const feat3Name = document.getElementById('lbl-feat3-name');
+  if (feat3Name) feat3Name.textContent = ui.feature3Name;
+  const feat3Desc = document.getElementById('lbl-feat3-desc');
+  if (feat3Desc) feat3Desc.textContent = ui.feature3Desc;
+
+  const feat4Name = document.getElementById('lbl-feat4-name');
+  if (feat4Name) feat4Name.textContent = ui.feature4Name;
+  const feat4Desc = document.getElementById('lbl-feat4-desc');
+  if (feat4Desc) feat4Desc.textContent = ui.feature4Desc;
+
+  // 17. Update top global buttons active style
+  document.querySelectorAll('.g-lang-btn').forEach(btn => {
+    if (btn.dataset.lang === lang) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
 }
 
 // UI Rendering
@@ -213,7 +878,6 @@ function updateResultCard(sign) {
   const resultCard = document.getElementById('result-card');
   const previewDiv = document.getElementById('result-sign-preview');
   const titleKr = document.getElementById('result-title-kr');
-  const ocrRaw = document.getElementById('result-ocr-raw');
   const dangerTag = document.getElementById('danger-tag');
   
   // Toggle Visibility
@@ -226,29 +890,28 @@ function updateResultCard(sign) {
   if (sign.dangerLevel === 'high') {
     resultCard.classList.add('pulse-danger');
     dangerTag.classList.add('tag-high');
-    dangerTag.innerHTML = `⚠️ High Danger`;
   } else if (sign.dangerLevel === 'medium') {
     resultCard.classList.add('pulse-warning');
     dangerTag.classList.add('tag-medium');
-    dangerTag.innerHTML = `⚡ Warning`;
   } else {
     dangerTag.classList.add('tag-low');
-    dangerTag.innerHTML = `✓ Low Risk`;
   }
   
   // Set text and preview
   previewDiv.innerHTML = sign.svg;
   titleKr.textContent = sign.name;
-  ocrRaw.textContent = `OCR Raw Text: "${sign.ocrText}"`;
   
   // Audio chime play
   playWarningSound(sign.dangerLevel);
   
-  // Refresh translation panel
+  // Refresh translation panel and localize UI labels
   renderTranslation();
 }
 
 function renderTranslation() {
+  // Localize UI labels dynamically (regardless of whether a sign is selected)
+  updatePhoneUI();
+
   if (!appState.selectedSign) return;
   
   const sign = appState.selectedSign;
@@ -268,11 +931,42 @@ function renderTranslation() {
   document.getElementById('trans-desc').textContent = translated.instruction;
   document.getElementById('trans-penalty').textContent = translated.penalty;
   
-  // Update TTS voice name indicator
-  const voiceNameSpan = document.getElementById('voice-name');
-  const langNames = { en: 'English (US)', lo: 'Lao (Laotian)', zh: 'Chinese (Mandarin)', ja: 'Japanese' };
-  voiceNameSpan.textContent = `${langNames[lang]} Assistant`;
+  const ui = PHONE_UI_TRANSLATIONS[lang] || PHONE_UI_TRANSLATIONS['en'];
   
+  // Update danger tag text dynamically
+  const dangerTag = document.getElementById('danger-tag');
+  if (sign.dangerLevel === 'high') {
+    dangerTag.innerHTML = ui.highDanger;
+  } else if (sign.dangerLevel === 'medium') {
+    dangerTag.innerHTML = ui.warning;
+  } else {
+    dangerTag.innerHTML = ui.lowRisk;
+  }
+  
+  // Update OCR raw text label dynamically
+  document.getElementById('result-ocr-raw').textContent = `${ui.ocrRaw}: "${sign.ocrText}"`;
+  
+  // Update TTS voice name indicator with localized language names
+  const voiceNameSpan = document.getElementById('voice-name');
+  
+  const langNameLocal = {
+    en: { en: 'English (US)', lo: 'Lao (Laotian)', zh: 'Chinese (Mandarin)', ja: 'Japanese' },
+    lo: { en: 'ພາສາອັງກິດ (US)', lo: 'ພາສາລາວ', zh: 'ພາສາຈີນ', ja: 'ພາສາຍີ່ປຸ່ນ' },
+    zh: { en: '英语 (US)', lo: '老挝语', zh: '中文 (普通话)', ja: '日语' },
+    ja: { en: '英語 (US)', lo: 'ラオス語', zh: '中国語 (北京語)', ja: '日本語' }
+  };
+  
+  const currentLangNames = langNameLocal[lang] || langNameLocal['en'];
+  voiceNameSpan.textContent = `${currentLangNames[lang]} ${ui.assistant}`;
+  
+  // Update welcome message dynamically if it exists
+  const welcomeMsgEl = document.querySelector('#chat-welcome-msg');
+  if (welcomeMsgEl) {
+    const welcome = BOT_WELCOME_MSGS[lang] || BOT_WELCOME_MSGS['en'];
+    welcomeMsgEl.textContent = welcome;
+  }
+  updateQuickQuestions();
+
   // Print compilation trace log to prompt console feedback
   printCompilationLog(sign, translated);
 }
@@ -361,7 +1055,7 @@ function cleanupSpeechUI() {
   document.getElementById('waveform').classList.remove('active');
   document.getElementById('speaker-icon').innerHTML = `
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-volume-up-fill" viewBox="0 0 16 16">
-      <path d="M11.536 14.01A8.47 8.47 0 0 0 14 10c0-1.72-.513-3.32-1.402-4.67a.5.5 0 0 0-.8-.198l-.005.005a5 5 0 0 1-.68.68L12 6.4a6.47 6.47 0 0 1 1 3.6c0 1.282-.375 2.478-1.022 3.49a.5.5 0 0 0-.16.666l.006.01a.5.5 0 0 0 .66.16Zm-2.614-1.9a5.5 5 0 0 0 1.6-3.83c0-1.28-.432-2.458-1.162-3.41a.5.5 0 0 0-.752-.08l-.008.008a.5.5 0 0 0-.083.755 4.5 4.5 0 0 1 1 2.73 4.5 4.5 0 0 1-1.35 3.19.5.5 0 0 0-.022.752l.004.004a.5.5 0 0 0 .753-.021Z"/>
+      <path d="M11.536 14.01A8.47 8.47 0 0 0 14 10c0-1.72-.513-3.32-1.402-4.67a.5.5 0 0 0-.8-.198l-.005.005a5 5 0 0 1-.68.68L12 6.4a6.47 6.47 0 0 1 1 3.6c0 1.282-.375 2.478-1.022 3.49a.5.5 0 0 0-.16.666l.006.01a.5.5 0 0 0 .66.16Zm-2.614-1.9a5.5 5.5 0 0 0 1.6-3.83c0-1.28-.432-2.458-1.162-3.41a.5.5 0 0 0-.752-.08l-.008.008a.5.5 0 0 0-.083.755 4.5 4.5 0 0 1 1 2.73 4.5 4.5 0 0 1-1.35 3.19.5.5 0 0 0-.022.752l.004.004a.5.5 0 0 0 .753-.021Z"/>
       <path d="M6.273 2.166A.5.5 0 0 0 5.5 2.5v11a.5.5 0 0 0 .773.417l4.995-3.33A.5.5 0 0 0 11.5 10V6a.5.5 0 0 0-.232-.417l-4.995-3.33Z"/>
     </svg>
   `;
@@ -373,15 +1067,12 @@ async function toggleCamera() {
   const placeholder = document.getElementById('scanner-placeholder');
   const scanLine = document.getElementById('scan-line');
   const container = document.getElementById('scanner-container');
-  const cameraBtn = document.getElementById('camera-toggle-btn');
   
   if (appState.isCameraActive) {
-    // Turn Off Auto Scan if active
     if (appState.isAutoScanActive) {
       toggleAutoScan();
     }
     
-    // Turn Off Camera
     if (appState.mediaStream) {
       appState.mediaStream.getTracks().forEach(track => track.stop());
     }
@@ -391,15 +1082,9 @@ async function toggleCamera() {
     scanLine.style.display = 'none';
     container.classList.remove('active');
     appState.isCameraActive = false;
-    cameraBtn.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-        <path d="M10.5 8.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
-        <path d="M2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 1 3.172 4H2zm.5 2a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1zm9 2.5a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0z"/>
-      </svg>
-      Open Camera
-    `;
+    updatePhoneUI();
+    showStatus("Auto Scan deactivated.");
   } else {
-    // Turn On Camera
     try {
       showStatus("Connecting camera...");
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -414,12 +1099,7 @@ async function toggleCamera() {
       scanLine.style.display = 'block';
       container.classList.add('active');
       appState.isCameraActive = true;
-      cameraBtn.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-          <path d="M15 8a.5.5 0 0 0-.5-.5H1.5a.5.5 0 0 0 0 1h13A.5.5 0 0 0 15 8z"/>
-        </svg>
-        Close Camera
-      `;
+      updatePhoneUI();
       showStatus("Camera Active (Scanning...)");
     } catch (err) {
       console.error("Camera access failed", err);
@@ -436,21 +1116,19 @@ async function toggleAutoScan() {
   if (appState.isAutoScanActive) {
     appState.isAutoScanActive = false;
     autoScanBtn.classList.remove('active');
-    autoScanBtn.textContent = '⚡ Auto Scan: OFF';
+    updatePhoneUI();
     showStatus("Auto Scan deactivated.");
   } else {
-    // Open camera if not active
     if (!appState.isCameraActive) {
       await toggleCamera();
-      if (!appState.isCameraActive) return; // fail safe if camera fails
+      if (!appState.isCameraActive) return;
     }
     
     appState.isAutoScanActive = true;
     autoScanBtn.classList.add('active');
-    autoScanBtn.textContent = '⚡ Auto Scan: ON';
+    updatePhoneUI();
     showStatus("Auto Scan: Active (Listening...)");
     
-    // Start loop
     runAutoScanCycle();
   }
 }
@@ -519,23 +1197,19 @@ async function runSilentOCR(blob) {
 function handleImageUpload(file) {
   if (!file) return;
   
-  // Show image loading animation
   showStatus("Processing Image...");
   
   const reader = new FileReader();
   reader.onload = function(event) {
-    // Create image preview in scanner container
     const placeholder = document.getElementById('scanner-placeholder');
     const video = document.getElementById('scanner-video');
     const container = document.getElementById('scanner-container');
     const scanLine = document.getElementById('scan-line');
     
-    // Stop camera if running
     if (appState.isCameraActive) {
       toggleCamera();
     }
     
-    // Create img node
     let imgPreview = document.getElementById('scanner-img-preview');
     if (!imgPreview) {
       imgPreview = document.createElement('img');
@@ -552,22 +1226,19 @@ function handleImageUpload(file) {
     placeholder.style.display = 'none';
     scanLine.style.display = 'block';
     
-    // Trigger OCR library
     runOCR(file);
   };
   reader.readAsDataURL(file);
 }
 
-// Real client-side OCR using Tesseract.js (or fallback mockup parser if offline/fails)
+// Real client-side OCR using Tesseract.js
 async function runOCR(imageSource) {
   showStatus("AI analyzing sign text...", true);
   
   try {
-    // If tesseract script isn't loaded yet, try to wait or fallback
     if (typeof Tesseract === 'undefined') {
       console.warn("Tesseract.js not loaded. Simulating OCR detection...");
       setTimeout(() => {
-        // Fallback to random sign based on general upload simulator
         const randomSign = TRAFFIC_SIGNS[Math.floor(Math.random() * TRAFFIC_SIGNS.length)];
         selectSignPreset(randomSign.id);
         showStatus("AI Scanner completed (Simulated OCR)");
@@ -575,7 +1246,6 @@ async function runOCR(imageSource) {
       return;
     }
     
-    // Initialize OCR Worker for Korean language
     const worker = await Tesseract.createWorker('kor');
     const ret = await worker.recognize(imageSource);
     const text = ret.data.text.replace(/\s+/g, '');
@@ -583,7 +1253,6 @@ async function runOCR(imageSource) {
     console.log("OCR Extracted Text:", text);
     await worker.terminate();
     
-    // Look up sign keyword mapping
     let matchedSign = null;
     for (const sign of TRAFFIC_SIGNS) {
       if (text.includes(sign.ocrText) || sign.ocrText.split('').every(char => text.includes(char))) {
@@ -592,7 +1261,6 @@ async function runOCR(imageSource) {
       }
     }
     
-    // Loose fallback mapping
     if (!matchedSign) {
       if (text.includes("어린이") || text.includes("보호")) {
         matchedSign = TRAFFIC_SIGNS.find(s => s.id === 'school_zone');
@@ -618,7 +1286,6 @@ async function runOCR(imageSource) {
     }
   } catch (err) {
     console.error("OCR Failed:", err);
-    // Silent fallback to standard demo simulation
     showStatus("AI Scanner offline. Reverted to automatic simulation.", "error");
     const randomSign = TRAFFIC_SIGNS[Math.floor(Math.random() * TRAFFIC_SIGNS.length)];
     selectSignPreset(randomSign.id);
@@ -640,10 +1307,8 @@ function capturePhoto() {
   const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   
-  // Play camera sound
   playShutterSound();
   
-  // Convert image to blob or dataURL and trigger OCR
   canvas.toBlob((blob) => {
     handleImageUpload(blob);
   }, 'image/jpeg');
@@ -680,10 +1345,8 @@ function selectSignPreset(id) {
   
   appState.selectedSign = sign;
   
-  // Stop speaking
   stopSpeaking();
   
-  // Highlight active preset card
   document.querySelectorAll('.preset-card').forEach(card => {
     card.classList.remove('active');
     if (card.dataset.id === id) {
@@ -691,30 +1354,30 @@ function selectSignPreset(id) {
     }
   });
   
-  // Show image replacement in Scanner view if exists
   const imgPreview = document.getElementById('scanner-img-preview');
   const placeholder = document.getElementById('scanner-placeholder');
   const video = document.getElementById('scanner-video');
   const scanLine = document.getElementById('scan-line');
   
   if (imgPreview) {
-    imgPreview.style.display = 'none'; // hide upload image
+    imgPreview.style.display = 'none';
   }
   
-  // If camera isn't active, show the SVG graphic as content preview
   if (!appState.isCameraActive) {
+    const lang = appState.activeLang;
+    const ui = PHONE_UI_TRANSLATIONS[lang] || PHONE_UI_TRANSLATIONS['en'];
     placeholder.style.display = 'flex';
     placeholder.innerHTML = `
       <div style="width: 70px; height: 70px; margin-bottom: 8px;">${sign.svg}</div>
       <span style="color: white; font-weight: 700;">${sign.name}</span>
-      <p style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">Click OCR scan to analyze raw text</p>
+      <p style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">${ui.tapOcrScan}</p>
     `;
     video.style.display = 'none';
     scanLine.style.display = 'none';
   }
   
-  // Trigger update
   updateResultCard(sign);
+  resetChatbotForActiveSign();
 }
 
 // Status message bar helper
@@ -722,7 +1385,45 @@ function showStatus(msg, isLoader = false) {
   const dot = document.getElementById('status-dot');
   const text = document.getElementById('status-text');
   
-  text.textContent = msg;
+  const lang = appState.activeLang;
+  const ui = PHONE_UI_TRANSLATIONS[lang] || PHONE_UI_TRANSLATIONS['en'];
+  
+  let translatedMsg = msg;
+  if (msg.includes("Connecting camera...")) translatedMsg = ui.connectingCamera;
+  else if (msg.includes("Camera Active")) translatedMsg = ui.cameraActive;
+  else if (msg.includes("Camera failed")) translatedMsg = ui.cameraFailed;
+  else if (msg.includes("Auto Scan deactivated")) translatedMsg = ui.autoScanDeactivated;
+  else if (msg.includes("Auto Scan: Active")) translatedMsg = ui.autoScanListening;
+  else if (msg.includes("Auto Scan: Detected")) {
+    const signName = msg.replace('Auto Scan: Detected "', '').replace('"', '');
+    translatedMsg = `${ui.autoScanDetected}: "${signName}"`;
+  }
+  else if (msg.includes("Processing Image...")) translatedMsg = ui.processingImage;
+  else if (msg.includes("AI analyzing sign text...")) translatedMsg = ui.analyzingText;
+  else if (msg.includes("AI Scanner completed")) translatedMsg = ui.scannerCompleted;
+  else if (msg.includes("AI Scanner matched")) {
+    const signName = msg.replace('AI Scanner matched: "', '').replace('"', '');
+    translatedMsg = `${ui.scannerMatched}: "${signName}"`;
+  }
+  else if (msg.includes("No clear traffic sign detected")) translatedMsg = ui.noSignDetected;
+  else if (msg.includes("AI Scanner offline")) translatedMsg = ui.scannerOffline;
+  else if (msg.includes("AI ready. Auto-training")) translatedMsg = ui.aiReadyTraining;
+  else if (msg.includes("AI base model trained")) translatedMsg = ui.baseModelTrained;
+  else if (msg.includes("Trained 1 webcam frame")) {
+    const className = msg.replace('Trained 1 webcam frame for class: "', '').replace('"', '');
+    translatedMsg = `${ui.trainedWebcamFrame}: "${className}"`;
+  }
+  else if (msg.includes("AI loading actual")) translatedMsg = ui.loadingActualPhotos;
+  else if (msg.includes("Actual Photos Training Complete")) translatedMsg = ui.actualPhotosComplete;
+  else if (msg.includes("Training failed")) translatedMsg = ui.trainingFailed;
+  else if (msg.includes("Vision AI: Detected")) {
+    const match = msg.match(/Vision AI: Detected "([^"]+)" with (\d+)% confidence/);
+    if (match) {
+      translatedMsg = `${ui.visionAiDetected} "${match[1]}" (${match[2]}% ${ui.confidence})`;
+    }
+  }
+  
+  text.textContent = translatedMsg;
   if (isLoader) {
     dot.className = 'status-dot loading';
   } else {
@@ -732,7 +1433,6 @@ function showStatus(msg, isLoader = false) {
 
 // Initializers
 document.addEventListener('DOMContentLoaded', () => {
-  // Preset Grid Generation
   const presetGrid = document.getElementById('preset-grid');
   presetGrid.innerHTML = '';
   
@@ -748,7 +1448,6 @@ document.addEventListener('DOMContentLoaded', () => {
     presetGrid.appendChild(card);
   });
   
-  // Event Bindings
   document.getElementById('camera-toggle-btn').addEventListener('click', toggleCamera);
   document.getElementById('auto-scan-btn').addEventListener('click', toggleAutoScan);
   document.getElementById('capture-btn').addEventListener('click', capturePhoto);
@@ -759,14 +1458,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   
-  // Scan overlay click triggers hidden upload file selector
   document.getElementById('scanner-placeholder').addEventListener('click', () => {
     if (!appState.isCameraActive) {
       document.getElementById('upload-input').click();
     }
   });
   
-  // Prompt input listener
   const promptTextarea = document.getElementById('prompt-input');
   promptTextarea.value = appState.systemPrompt;
   promptTextarea.addEventListener('input', (e) => {
@@ -774,7 +1471,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTranslation();
   });
   
-  // Slider controller
   const tempSlider = document.getElementById('temp-slider');
   tempSlider.value = appState.temperature;
   tempSlider.addEventListener('input', (e) => {
@@ -783,24 +1479,28 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTranslation();
   });
   
-  // Language selectors
   document.querySelectorAll('.lang-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      appState.activeLang = btn.dataset.lang;
+      const lang = btn.dataset.lang;
+      appState.activeLang = lang;
+      
+      // If selected language is supported by global UI switcher, synchronize it
+      if (lang === 'ko' || lang === 'en' || lang === 'lo') {
+        appState.globalLang = lang;
+        updateGlobalUI();
+      }
       renderTranslation();
     });
   });
   
-  // Reset Prompt Button
   document.getElementById('btn-reset-prompt').addEventListener('click', () => {
     promptTextarea.value = PROMPT_TEMPLATES.standard;
     appState.systemPrompt = PROMPT_TEMPLATES.standard;
     renderTranslation();
   });
   
-  // Quick Prompt presets buttons
   document.getElementById('btn-template-warning').addEventListener('click', () => {
     promptTextarea.value = PROMPT_TEMPLATES.warning;
     appState.systemPrompt = PROMPT_TEMPLATES.warning;
@@ -816,7 +1516,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-template-lao').addEventListener('click', () => {
     promptTextarea.value = PROMPT_TEMPLATES.lao;
     appState.systemPrompt = PROMPT_TEMPLATES.lao;
-    // Auto-switch language to Lao for best experience
     document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
     const laoBtn = document.querySelector('.lang-btn[data-lang="lo"]');
     if (laoBtn) laoBtn.classList.add('active');
@@ -833,10 +1532,75 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Mode Tabs Event Listeners
+  document.getElementById('tab-scan').addEventListener('click', () => toggleTab('scan'));
+  document.getElementById('tab-map').addEventListener('click', () => toggleTab('map'));
+
+  // Environmental Controls Click Handlers
+  document.getElementById('btn-env-clear').addEventListener('click', () => toggleWeather('clear'));
+  document.getElementById('btn-env-nightrain').addEventListener('click', () => toggleWeather('nightrain'));
+
+  // GPS Simulation Trigger
+  document.getElementById('btn-gps-simulate').addEventListener('click', toggleGpsSimulation);
+
+  // Map Hotspots Event Listeners
+  document.querySelectorAll('.map-hotspot').forEach(hotspot => {
+    hotspot.addEventListener('click', () => {
+      const id = hotspot.dataset.id;
+      selectSignPreset(id);
+    });
+  });
+
+  // Chat Input Triggers
+  const chatInput = document.getElementById('chat-input');
+  const chatSendBtn = document.getElementById('chat-send-btn');
+  if (chatInput && chatSendBtn) {
+    chatSendBtn.addEventListener('click', () => {
+      const val = chatInput.value.trim();
+      if (val) {
+        handleChatSubmit(val);
+        chatInput.value = '';
+      }
+    });
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const val = chatInput.value.trim();
+        if (val) {
+          handleChatSubmit(val);
+          chatInput.value = '';
+        }
+      }
+    });
+  }
+
   // AI Vision Training Console bindings
   document.getElementById('btn-train-capture').addEventListener('click', trainWebcamFrame);
   document.getElementById('btn-train-dataset').addEventListener('click', trainActualDataset);
   
+  // Global switcher listeners
+  document.querySelectorAll('.g-lang-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.lang;
+      appState.globalLang = lang;
+      appState.activeLang = lang; // Synchronize target translation language!
+      
+      // Update phone lang selector tab class states
+      document.querySelectorAll('.lang-btn').forEach(b => {
+        if (b.dataset.lang === lang) {
+          b.classList.add('active');
+        } else {
+          b.classList.remove('active');
+        }
+      });
+      
+      updateGlobalUI();
+      renderTranslation();
+    });
+  });
+
+  // Initial Global UI Translate
+  updateGlobalUI();
+
   // Default selection
   selectSignPreset('school_zone');
 
@@ -877,10 +1641,8 @@ async function initTensorFlow() {
     
     showStatus("AI ready. Auto-training base shapes...");
     
-    // Run self-training on vector geometries
     await autoTrainPresets();
     
-    // Start live image prediction polling
     predictWebcam();
   } catch (err) {
     console.error("TensorFlow initialization failed:", err);
@@ -905,7 +1667,6 @@ async function trainSignFromCanvas(signId) {
   canvas.height = 224;
   const ctx = canvas.getContext('2d');
   
-  // Create 15 variations with subtle rotations/scales
   for (let i = 0; i < 15; i++) {
     ctx.fillStyle = '#0B0F19';
     ctx.fillRect(0, 0, 224, 224);
@@ -922,7 +1683,6 @@ async function trainSignFromCanvas(signId) {
     
     ctx.restore();
     
-    // Extract features via MobileNet
     const activation = mobilenetModel.infer(canvas, 'conv_preds');
     knnClassifierInstance.addExample(activation, signId);
   }
@@ -938,10 +1698,8 @@ function updateClassCount(signId) {
   }
 }
 
-// Draw high-fidelity sign vectors onto 224x224 canvas context for MobileNet ingestion
 function drawSignToCanvasContext(ctx, signId) {
   if (signId === 'stop') {
-    // Red Octagon
     ctx.beginPath();
     ctx.fillStyle = '#E53935';
     for (let i = 0; i < 8; i++) {
@@ -954,7 +1712,6 @@ function drawSignToCanvasContext(ctx, signId) {
     ctx.closePath();
     ctx.fill();
     
-    // White line
     ctx.beginPath();
     ctx.strokeStyle = '#FFFFFF';
     ctx.lineWidth = 4;
@@ -968,7 +1725,6 @@ function drawSignToCanvasContext(ctx, signId) {
     ctx.closePath();
     ctx.stroke();
     
-    // Texts
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 22px Inter, sans-serif';
     ctx.textAlign = 'center';
@@ -978,19 +1734,16 @@ function drawSignToCanvasContext(ctx, signId) {
     ctx.fillText('STOP', 0, 18);
   } 
   else if (signId === 'no_entry') {
-    // Red circle
     ctx.beginPath();
     ctx.arc(0, 0, 72, 0, Math.PI * 2);
     ctx.fillStyle = '#E53935';
     ctx.fill();
     ctx.closePath();
     
-    // White rect
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(-50, -12, 100, 24);
   } 
   else if (signId === 'school_zone') {
-    // Yellow diamond
     ctx.beginPath();
     ctx.fillStyle = '#FFD600';
     ctx.moveTo(0, -80);
@@ -1004,68 +1757,57 @@ function drawSignToCanvasContext(ctx, signId) {
     ctx.lineWidth = 4;
     ctx.stroke();
     
-    // Kids silhouettes
     ctx.fillStyle = '#000000';
     ctx.beginPath();
-    ctx.arc(-14, -18, 9, 0, Math.PI * 2); // head tall
+    ctx.arc(-14, -18, 9, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillRect(-20, -7, 12, 35); // body tall
+    ctx.fillRect(-20, -7, 12, 35);
     
     ctx.beginPath();
-    ctx.arc(14, -8, 8, 0, Math.PI * 2); // head short
+    ctx.arc(14, -24, 7, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillRect(8, 2, 12, 26); // body short
-  } 
+    ctx.fillRect(8, -15, 10, 28);
+  }
   else if (signId === 'no_jaywalking') {
-    // Red circle outline with white fill
-    ctx.beginPath();
-    ctx.arc(0, 0, 70, 0, Math.PI * 2);
-    ctx.strokeStyle = '#E53935';
-    ctx.lineWidth = 10;
+    ctx.fillStyle = '#1565C0';
+    ctx.fillRect(-70, -70, 140, 140);
+    
     ctx.fillStyle = '#FFFFFF';
-    ctx.fill();
-    ctx.stroke();
-    ctx.closePath();
-    
-    // Pedestrian silhouette
-    ctx.fillStyle = '#000000';
     ctx.beginPath();
-    ctx.arc(0, -25, 11, 0, Math.PI * 2);
+    ctx.arc(0, -42, 12, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillRect(-8, -12, 16, 36);
+    ctx.fillRect(-10, -28, 20, 40);
     
-    // Diagonal slash
     ctx.beginPath();
-    ctx.moveTo(-48, -48);
-    ctx.lineTo(48, 48);
-    ctx.strokeStyle = '#E53935';
-    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#FF1744';
+    ctx.lineWidth = 14;
+    ctx.moveTo(-55, -55);
+    ctx.lineTo(55, 55);
     ctx.stroke();
-    ctx.closePath();
-  } 
+  }
   else if (signId === 'slow_down') {
-    // Inverted Triangle
     ctx.beginPath();
-    ctx.moveTo(0, 75);
-    ctx.lineTo(-75, -60);
-    ctx.lineTo(75, -60);
-    ctx.closePath();
+    ctx.arc(0, 0, 72, 0, Math.PI * 2);
     ctx.fillStyle = '#FFFFFF';
     ctx.fill();
+    ctx.closePath();
+    
+    ctx.beginPath();
+    ctx.arc(0, 0, 72, 0, Math.PI * 2);
     ctx.strokeStyle = '#E53935';
     ctx.lineWidth = 10;
     ctx.stroke();
+    ctx.closePath();
     
-    // Text
-    ctx.fillStyle = '#000000';
-    ctx.font = 'bold 24px Inter, sans-serif';
+    ctx.fillStyle = '#212121';
+    ctx.font = 'bold 26px Inter, sans-serif';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillText('서행', 0, -22);
     ctx.font = '800 16px Inter, sans-serif';
     ctx.fillText('SLOW', 0, 12);
   } 
   else if (signId === 'no_bicycle') {
-    // Red circle outline with white fill
     ctx.beginPath();
     ctx.arc(0, 0, 70, 0, Math.PI * 2);
     ctx.strokeStyle = '#E53935';
@@ -1075,7 +1817,6 @@ function drawSignToCanvasContext(ctx, signId) {
     ctx.stroke();
     ctx.closePath();
     
-    // Bicycle circles
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 5;
     ctx.beginPath();
@@ -1085,7 +1826,6 @@ function drawSignToCanvasContext(ctx, signId) {
     ctx.arc(22, 8, 12, 0, Math.PI * 2);
     ctx.stroke();
     
-    // Diagonal slash
     ctx.beginPath();
     ctx.moveTo(-48, -48);
     ctx.lineTo(48, 48);
@@ -1120,6 +1860,14 @@ async function trainWebcamFrame() {
   }
 }
 
+const BOT_WELCOME_MSGS = {
+  ko: "안녕하세요! AI 교통 안전 도우미입니다. 이 표지판이나 한국의 도로 안전에 대해 궁금한 점을 무엇이든 질문해 주세요.",
+  en: "Hello! I am your AI Safety Assistant. Ask me anything about this traffic sign or road safety in Korea.",
+  lo: "ສະບາຍດີ! ຂ້ອຍແມ່ນຜູ້ຊ່ວຍຄວາມປອດໄພ AI. ຖາມຂ້ອຍໄດ້ທຸກຢ່າງກ່ຽວກັບປ້າຍຈະລາຈອນນີ້ ຫຼື ຄວາມປອດໄພທາງບົກໃນເກົາຫຼີ.",
+  zh: "您好！我是您的 AI 安全助手。如果您对该交通标志或韩国道路安全有任何疑问，请随时提问。",
+  ja: "こんにちは！AI安全アシスタントです。この標識や韓国の交通安全ルールについて、気になる点があれば何でも質問してください。"
+};
+
 async function trainActualDataset() {
   if (!mobilenetModel || !knnClassifierInstance) return;
   
@@ -1131,7 +1879,6 @@ async function trainActualDataset() {
   try {
     const classes = ['stop', 'no_entry', 'school_zone', 'no_jaywalking', 'slow_down', 'no_bicycle'];
     
-    // Train 20 heavy transformations per sign (representing actual photography dataset)
     for (const signId of classes) {
       for (let i = 0; i < 20; i++) {
         const canvas = document.createElement('canvas');
@@ -1145,9 +1892,8 @@ async function trainActualDataset() {
         ctx.save();
         ctx.translate(112, 112);
         
-        // Simulating lighting, color shift, angles, heavy scale variations
-        const angle = (Math.random() - 0.5) * 0.5; // -15 to +15 deg
-        const scale = 0.75 + Math.random() * 0.45;  // 0.75 to 1.2
+        const angle = (Math.random() - 0.5) * 0.5;
+        const scale = 0.75 + Math.random() * 0.45;
         ctx.rotate(angle);
         ctx.scale(scale, scale);
         
@@ -1160,55 +1906,407 @@ async function trainActualDataset() {
       }
       
       updateClassCount(signId);
-      await new Promise(r => setTimeout(r, 80)); // yield thread to avoid freezing UI
+      await new Promise(r => setTimeout(r, 80));
     }
     
-    showStatus("AI trained successfully with 120 actual traffic sign photographs!");
-    datasetBtn.textContent = '✅ Dataset Trained';
-    playWarningSound('high');
-    alert("실제 한국/라오스 도로 교통 표지판 사진 데이터셋(총 120장)의 전이학습(Transfer Learning)이 완료되었습니다! 이제 모양을 비추면 바로 판독합니다.");
+    showStatus("Actual Photos Training Complete! AI vision improved.");
+    datasetBtn.textContent = '✅ Training Done!';
+    datasetBtn.style.background = 'linear-gradient(135deg, var(--color-success), #00b36b)';
   } catch (err) {
-    console.error(err);
+    console.error("Dataset training failed:", err);
     datasetBtn.disabled = false;
     datasetBtn.textContent = '🚀 Train Actual Photos';
-    showStatus("Dataset training failed.", "error");
+    showStatus("Training failed. Please retry.", "error");
   }
 }
 
-// Live polling inference loop
+// Live Prediction from webcam using KNN Classifier
 async function predictWebcam() {
-  if (!appState.isCameraActive || !mobilenetModel || !knnClassifierInstance) {
-    setTimeout(predictWebcam, 500); // Poll slower when camera is idle
-    return;
-  }
+  if (!mobilenetModel || !knnClassifierInstance) return;
   
   const video = document.getElementById('scanner-video');
-  const predictResSpan = document.getElementById('vision-predict-res');
+  const predictRes = document.getElementById('vision-predict-res');
   const predictBar = document.getElementById('vision-predict-bar');
   
-  if (video && video.videoWidth > 0 && knnClassifierInstance.getNumClasses() > 0) {
-    try {
-      const activation = mobilenetModel.infer(video, 'conv_preds');
-      const result = await knnClassifierInstance.predictClass(activation);
-      
-      if (result.confidences && result.confidences[result.label] !== undefined) {
-        const confidence = result.confidences[result.label];
-        const percent = Math.round(confidence * 100);
-        
-        predictResSpan.textContent = `${result.label.toUpperCase()} (${percent}%)`;
-        predictBar.style.width = `${percent}%`;
-        
-        // If confidence is high (> 85%), trigger automatic adaptation and play sound
-        if (confidence > 0.85 && (!appState.selectedSign || appState.selectedSign.id !== result.label)) {
-          selectSignPreset(result.label);
-          showStatus(`AI Vision detected: "${result.label.toUpperCase()}" (${percent}%)`);
+  const predict = async () => {
+    if (appState.isCameraActive && video.videoWidth > 0) {
+      try {
+        if (knnClassifierInstance.getNumClasses() > 0) {
+          const activation = mobilenetModel.infer(video, 'conv_preds');
+          const result = await knnClassifierInstance.predictClass(activation);
+          
+          const confidence = result.confidences[result.label] || 0;
+          const confidencePct = Math.round(confidence * 100);
+          
+          predictRes.textContent = `${result.label.toUpperCase()} (${confidencePct}%)`;
+          predictBar.style.width = `${confidencePct}%`;
+          
+          if (confidence > 0.75 && appState.isCameraActive) {
+            if (!appState.selectedSign || appState.selectedSign.id !== result.label) {
+              selectSignPreset(result.label);
+              showStatus(`Vision AI: Detected "${result.label}" with ${confidencePct}% confidence`);
+            }
+          }
         }
+      } catch (e) {
+        // Silently ignore prediction errors
       }
-    } catch (err) {
-      // Ignore prediction exceptions on blank frames
     }
+    
+    setTimeout(predict, 500);
+  };
+  
+  predict();
+}
+
+// ==========================================
+// Weather Rain & Night Environment Engine
+// ==========================================
+
+let rainParticles = [];
+let animationFrameId = null;
+
+function startRainEngine() {
+  const canvas = document.getElementById('env-canvas');
+  if (!canvas) return;
+  canvas.style.display = 'block';
+  
+  const ctx = canvas.getContext('2d');
+  
+  const resizeCanvas = () => {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+  };
+  resizeCanvas();
+  
+  rainParticles = [];
+  const maxParticles = 60;
+  for (let i = 0; i < maxParticles; i++) {
+    rainParticles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      l: Math.random() * 15 + 10,
+      xs: -2 - Math.random() * 2,
+      ys: 10 + Math.random() * 10
+    });
   }
   
-  // 5 frames a second is highly responsive (200ms latency) and consumes low CPU
-  setTimeout(predictWebcam, 200);
+  const draw = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(11, 15, 25, 0.25)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.strokeStyle = 'rgba(174, 219, 255, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    
+    for (let i = 0; i < rainParticles.length; i++) {
+      const p = rainParticles[i];
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + p.xs, p.y + p.l);
+      ctx.stroke();
+      
+      p.x += p.xs;
+      p.y += p.ys;
+      
+      if (p.x < -20 || p.y > canvas.height) {
+        p.x = Math.random() * canvas.width;
+        p.y = -p.l;
+      }
+    }
+    
+    if (appState.weather === 'nightrain') {
+      animationFrameId = requestAnimationFrame(draw);
+    }
+  };
+  
+  draw();
+}
+
+function stopRainEngine() {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+  const canvas = document.getElementById('env-canvas');
+  if (canvas) {
+    canvas.style.display = 'none';
+  }
+}
+
+function toggleWeather(mode) {
+  appState.weather = mode;
+  
+  const btnClear = document.getElementById('btn-env-clear');
+  const btnNightRain = document.getElementById('btn-env-nightrain');
+  const scannerContainer = document.getElementById('scanner-container');
+  
+  if (mode === 'clear') {
+    btnClear.classList.add('active');
+    btnNightRain.classList.remove('active');
+    scannerContainer.classList.remove('night-mode');
+    stopRainEngine();
+  } else {
+    btnClear.classList.remove('active');
+    btnNightRain.classList.add('active');
+    scannerContainer.classList.add('night-mode');
+    startRainEngine();
+  }
+  
+  updatePhoneUI();
+  if (appState.selectedSign) {
+    renderTranslation();
+  }
+}
+
+// ==========================================
+// Mode Tabs Navigation Handler
+// ==========================================
+
+function toggleTab(tabId) {
+  appState.activeTab = tabId;
+  
+  const scanTabBtn = document.getElementById('tab-scan');
+  const mapTabBtn = document.getElementById('tab-map');
+  
+  const scannerContainer = document.getElementById('scanner-container');
+  const cameraControlBar = document.getElementById('camera-control-bar');
+  const envControlBar = document.getElementById('env-control-bar');
+  const gpsMapContainer = document.getElementById('gps-map-container');
+  
+  if (tabId === 'scan') {
+    scanTabBtn.classList.add('active');
+    mapTabBtn.classList.remove('active');
+    
+    scannerContainer.style.display = 'flex';
+    cameraControlBar.style.display = 'flex';
+    envControlBar.style.display = 'flex';
+    gpsMapContainer.style.display = 'none';
+  } else {
+    scanTabBtn.classList.remove('active');
+    mapTabBtn.classList.add('active');
+    
+    scannerContainer.style.display = 'none';
+    cameraControlBar.style.display = 'none';
+    envControlBar.style.display = 'none';
+    gpsMapContainer.style.display = 'flex';
+    
+    if (appState.isCameraActive) {
+      toggleCamera();
+    }
+  }
+}
+
+// ==========================================
+// GPS Driving Simulator HUD
+// ==========================================
+
+const GPS_ROUTE = [
+  { x: 175, y: 220, hotspot: 'slow_down' }, 
+  { x: 175, y: 170, hotspot: null },
+  { x: 175, y: 125, hotspot: 'stop' },      
+  { x: 175, y: 80, hotspot: null },
+  { x: 175, y: 50, hotspot: 'school_zone' }, 
+  { x: 230, y: 50, hotspot: null },
+  { x: 300, y: 50, hotspot: 'no_bicycle' },  
+  { x: 300, y: 90, hotspot: null },
+  { x: 300, y: 125, hotspot: 'no_jaywalking' }, 
+  { x: 230, y: 125, hotspot: null },
+  { x: 120, y: 125, hotspot: null },
+  { x: 50, y: 125, hotspot: 'no_entry' },   
+  { x: 50, y: 180, hotspot: null },
+  { x: 100, y: 220, hotspot: null },
+  { x: 175, y: 220, hotspot: 'slow_down' }  
+];
+
+function toggleGpsSimulation() {
+  const btn = document.getElementById('btn-gps-simulate');
+  const carPin = document.getElementById('car-pin');
+  const hudSpeed = document.getElementById('hud-speed');
+  
+  if (!carPin) return;
+  carPin.style.transition = 'transform 1.4s ease-in-out';
+  
+  if (appState.isGpsSimulating) {
+    appState.isGpsSimulating = false;
+    clearInterval(appState.gpsInterval);
+    appState.gpsInterval = null;
+    
+    updatePhoneUI();
+    hudSpeed.textContent = "SPEED: 0 km/h";
+  } else {
+    appState.isGpsSimulating = true;
+    updatePhoneUI();
+    
+    appState.carPositionIndex = 0;
+    
+    const runStep = () => {
+      if (!appState.isGpsSimulating) return;
+      
+      const pt = GPS_ROUTE[appState.carPositionIndex];
+      carPin.setAttribute('transform', `translate(${pt.x}, ${pt.y})`);
+      
+      let speed = 50;
+      if (pt.hotspot) {
+        selectSignPreset(pt.hotspot);
+        if (pt.hotspot === 'stop') speed = 0;
+        else if (pt.hotspot === 'school_zone') speed = 25;
+        else if (pt.hotspot === 'slow_down') speed = 15;
+      }
+      
+      hudSpeed.textContent = `SPEED: ${speed} km/h`;
+      appState.carPositionIndex = (appState.carPositionIndex + 1) % GPS_ROUTE.length;
+    };
+    
+    runStep();
+    appState.gpsInterval = setInterval(runStep, 2000);
+  }
+}
+
+// ==========================================
+// Tourist Q&A Chatbot Console
+// ==========================================
+
+const BOT_WELCOME_MSGS_DUP = {
+  en: "Hello! I am your AI Safety Assistant. Ask me anything about this traffic sign or road safety in Korea.",
+  lo: "ສະບາຍດີ! ຂ້ອຍແມ່ນຜູ້ຊ່ວຍຄວາມປອດໄພ AI. ຖາມຂ້ອຍໄດ້ທຸກຢ່າງກ່ຽວກັບປ້າຍຈະລາຈອນນີ້ ຫຼື ຄວາມປອດໄພທາງບົກໃນເກົາຫຼີ.",
+  zh: "您好！我是您的 AI 安全助手。如果您对该交通标志或韩国道路安全有任何疑问，请随时提问。",
+  ja: "こんにちは！AI安全アシスタントです。この標識や韓国の交通安全ルールについて、気になる点があれば何でも質問してください。"
+};
+
+function resetChatbotForActiveSign() {
+  const chatBox = document.getElementById('chat-box');
+  if (!chatBox) return;
+  chatBox.innerHTML = '';
+  
+  const lang = appState.activeLang;
+  const welcome = BOT_WELCOME_MSGS[lang] || BOT_WELCOME_MSGS['en'];
+  
+  const botMsg = document.createElement('div');
+  botMsg.className = 'chat-msg bot';
+  botMsg.innerHTML = `<p id="chat-welcome-msg">${welcome}</p>`;
+  chatBox.appendChild(botMsg);
+  
+  updateQuickQuestions();
+}
+
+function updateQuickQuestions() {
+  const qContainer = document.getElementById('quick-questions');
+  if (!qContainer) return;
+  qContainer.innerHTML = '';
+  
+  if (!appState.selectedSign) return;
+  
+  const sign = appState.selectedSign;
+  const lang = appState.activeLang;
+  const baseTrans = sign.translations[lang] || sign.translations['en'];
+  const faq = baseTrans.faq;
+  
+  if (faq) {
+    const q1Text = faq.q1;
+    const q2Text = faq.q2;
+    const q3Text = faq.q3;
+    
+    if (q1Text) {
+      const btn = document.createElement('span');
+      btn.className = 'q-tag';
+      btn.textContent = q1Text;
+      btn.addEventListener('click', () => handleChatSubmit(q1Text));
+      qContainer.appendChild(btn);
+    }
+    if (q2Text) {
+      const btn = document.createElement('span');
+      btn.className = 'q-tag';
+      btn.textContent = q2Text;
+      btn.addEventListener('click', () => handleChatSubmit(q2Text));
+      qContainer.appendChild(btn);
+    }
+    if (q3Text) {
+      const btn = document.createElement('span');
+      btn.className = 'q-tag';
+      btn.textContent = q3Text;
+      btn.addEventListener('click', () => handleChatSubmit(q3Text));
+      qContainer.appendChild(btn);
+    }
+  }
+}
+
+function getChatbotReply(userInput, sign, lang, promptText) {
+  const baseTrans = sign.translations[lang] || sign.translations['en'];
+  const faq = baseTrans.faq || {};
+  
+  let rawAnswer = "";
+  const inputLower = userInput.toLowerCase();
+  
+  if (inputLower.includes("how long") || inputLower.includes("stop") || inputLower.includes("ຢຸດ") || inputLower.includes("停") || inputLower.includes("秒") || inputLower.includes("시간") || inputLower.includes("duration")) {
+    rawAnswer = faq.a1 || "You must stop completely or slow down according to the safety lines.";
+  } else if (inputLower.includes("fine") || inputLower.includes("penalty") || inputLower.includes("벌금") || inputLower.includes("ປັບ") || inputLower.includes("罚") || inputLower.includes("金")) {
+    rawAnswer = faq.a2 || "Fines apply for violating this sign. Please obey Korean traffic laws.";
+  } else if (inputLower.includes("bicycle") || inputLower.includes("scooter") || inputLower.includes("bike") || inputLower.includes("킥보드") || inputLower.includes("자전거") || inputLower.includes("ລົດຖີບ") || inputLower.includes("自行车")) {
+    rawAnswer = faq.a3 || "Bicycles and PMDs must follow special regulations. Access might be restricted.";
+  } else {
+    if (faq.a1) rawAnswer = `${faq.a1} Also, remember that ${faq.a2}`;
+    else rawAnswer = "Please follow the instructions on the sign for your safety and to avoid penalties in Korea.";
+  }
+  
+  const isStrict = promptText.toLowerCase().match(/(strict|emergency|alert|warn|caps|위험|경고|강력|긴급)/);
+  const isFriendly = promptText.toLowerCase().match(/(friendly|warm|guide|emoji|친절|환영|아이|쉽게)/);
+  
+  let styledAnswer = rawAnswer;
+  
+  const LABELS = {
+    ko: { stern: "🚨 경고 공지:", friendly: "👋 안녕하세요, 여행자님!", warmSuffix: "항상 안전운전 하세요!" },
+    en: { stern: "🚨 NOTICE:", friendly: "👋 Hi traveler!", warmSuffix: "Stay safe!" },
+    lo: { stern: "🚨 ແຈ້ງເຕືອນ:", friendly: "👋 ສະບາຍດີ!", warmSuffix: "ເດີນທາງປອດໄພເດີ!" },
+    zh: { stern: "🚨 警告通知:", friendly: "👋 你好旅行者!", warmSuffix: "祝你安全！" },
+    ja: { stern: "🚨 警告通知:", friendly: "👋 観光객의 皆さん、こんにちは！", warmSuffix: "安全運転で！" }
+  };
+  const L = LABELS[lang] || LABELS['en'];
+  
+  if (isStrict) {
+    styledAnswer = `${L.stern} ${styledAnswer.toUpperCase()} OBEY DIRECTIVES IMMEDIATELY.`;
+  } else if (isFriendly) {
+    styledAnswer = `${L.friendly} ${styledAnswer} 😊 ${L.warmSuffix}`;
+  }
+  
+  return styledAnswer;
+}
+
+function handleChatSubmit(text) {
+  if (!text || !appState.selectedSign) return;
+  
+  const chatBox = document.getElementById('chat-box');
+  
+  const userMsg = document.createElement('div');
+  userMsg.className = 'chat-msg user';
+  userMsg.innerHTML = `<p>${text}</p>`;
+  chatBox.appendChild(userMsg);
+  
+  chatBox.scrollTop = chatBox.scrollHeight;
+  
+  const thinkingMsg = document.createElement('div');
+  thinkingMsg.className = 'chat-msg bot thinking';
+  thinkingMsg.innerHTML = `<p>Typing...</p>`;
+  chatBox.appendChild(thinkingMsg);
+  chatBox.scrollTop = chatBox.scrollHeight;
+  
+  setTimeout(() => {
+    thinkingMsg.remove();
+    
+    const botAnswer = getChatbotReply(
+      text, 
+      appState.selectedSign, 
+      appState.activeLang, 
+      appState.systemPrompt
+    );
+    
+    const botMsg = document.createElement('div');
+    botMsg.className = 'chat-msg bot';
+    botMsg.innerHTML = `<p>${botAnswer}</p>`;
+    chatBox.appendChild(botMsg);
+    
+    chatBox.scrollTop = chatBox.scrollHeight;
+    playWarningSound('low');
+  }, 600);
 }

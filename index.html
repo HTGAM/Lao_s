@@ -19,6 +19,15 @@
 </head>
 <body>
 
+  <div class="global-lang-bar">
+    <span class="global-lang-label"><span class="lang-icon">🌐</span> Global UI Language:</span>
+    <div class="global-lang-buttons">
+      <button class="g-lang-btn active" data-lang="ko">한국어 (KO)</button>
+      <button class="g-lang-btn" data-lang="en">ENGLISH (EN)</button>
+      <button class="g-lang-btn" data-lang="lo">ລາວ (LO)</button>
+    </div>
+  </div>
+
   <div class="app-wrapper">
     
     <!-- Left: Mobile phone mockup screen for app presentation -->
@@ -34,8 +43,15 @@
           <span class="subtitle">KOREAN TO LAO & MULTILINGUAL SIGN GUIDE</span>
         </header>
 
+        <!-- Mode Navigation Tabs -->
+        <div class="mode-tabs">
+          <button class="mode-tab active" id="tab-scan">📷 Safety Scan</button>
+          <button class="mode-tab" id="tab-map">🗺️ GPS Map HUD</button>
+        </div>
+
         <!-- Scanner Screen Area -->
         <div class="scanner-container" id="scanner-container">
+          <canvas class="env-canvas" id="env-canvas"></canvas>
           <video class="scanner-video" id="scanner-video" autoplay playsinline></video>
           <div class="scanner-overlay">
             <div class="scanner-corner corner-tl"></div>
@@ -57,7 +73,7 @@
         </div>
 
         <!-- Camera Controls -->
-        <div class="control-bar">
+        <div class="control-bar" id="camera-control-bar">
           <button class="btn btn-primary" id="camera-toggle-btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
               <path d="M10.5 8.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
@@ -79,6 +95,117 @@
           
           <!-- Hidden file input for sign image uploads -->
           <input type="file" id="upload-input" accept="image/*" style="display: none;">
+        </div>
+
+        <!-- Environmental Controls -->
+        <div class="env-bar" id="env-control-bar">
+          <span class="env-label" id="env-label-text">Environment Filter:</span>
+          <div class="env-btn-group">
+            <button class="btn-env active" id="btn-env-clear">☀️ Clear</button>
+            <button class="btn-env" id="btn-env-nightrain">🌧️ Night & Rain</button>
+          </div>
+        </div>
+
+        <!-- GPS Map Container (Shown when tab-map is active) -->
+        <div class="gps-map-container" id="gps-map-container" style="display: none;">
+          <div class="gps-hud-overlay">
+            <span class="hud-label" id="hud-label-text">GPS ACTIVE: SEOUL SAFETY AREA</span>
+            <span class="hud-speed" id="hud-speed">SPEED: 0 km/h</span>
+          </div>
+          <div class="gps-map-svg-wrap">
+            <svg viewBox="0 0 350 250" class="gps-map-svg" xmlns="http://www.w3.org/2000/svg">
+              <!-- Grid Background -->
+              <defs>
+                <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                  <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1"/>
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#grid)" />
+              
+              <!-- Glow Filters -->
+              <filter id="neon-glow-blue" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+              <filter id="neon-glow-red" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+              
+              <!-- Roads (Neon lines) -->
+              <!-- Main Highway -->
+              <path d="M -50 125 L 400 125" stroke="rgba(0, 176, 255, 0.2)" stroke-width="10" fill="none"/>
+              <path d="M -50 125 L 400 125" stroke="rgba(0, 176, 255, 0.7)" stroke-width="2" fill="none" filter="url(#neon-glow-blue)"/>
+              
+              <!-- School Zone Street -->
+              <path d="M 175 -50 L 175 300" stroke="rgba(255, 214, 0, 0.2)" stroke-width="6" fill="none"/>
+              <path d="M 175 -50 L 175 300" stroke="rgba(255, 214, 0, 0.7)" stroke-width="1.5" fill="none"/>
+              
+              <!-- Sub Streets -->
+              <path d="M 50 -50 L 50 300" stroke="rgba(255,255,255,0.04)" stroke-width="4" fill="none"/>
+              <path d="M 300 -50 L 300 300" stroke="rgba(255,255,255,0.04)" stroke-width="4" fill="none"/>
+              <path d="M -50 50 L 400 50" stroke="rgba(255,255,255,0.04)" stroke-width="4" fill="none"/>
+              <path d="M -50 200 L 400 200" stroke="rgba(255,255,255,0.04)" stroke-width="4" fill="none"/>
+              
+              <!-- Hotspot circles / Interactive Sign Anchors -->
+              <!-- Stop Sign Area -->
+              <g class="map-hotspot" data-id="stop" transform="translate(175, 125)" style="cursor: pointer;">
+                <circle cx="0" cy="0" r="14" fill="rgba(229, 57, 53, 0.15)" stroke="#E53935" stroke-width="2" class="pulse-hotspot"/>
+                <circle cx="0" cy="0" r="4" fill="#E53935"/>
+                <text y="-18" font-size="8" fill="#F8FAFC" text-anchor="middle" font-weight="700">STOP</text>
+              </g>
+              
+              <!-- School Zone Area -->
+              <g class="map-hotspot" data-id="school_zone" transform="translate(175, 50)" style="cursor: pointer;">
+                <circle cx="0" cy="0" r="14" fill="rgba(255, 214, 0, 0.15)" stroke="#FFD600" stroke-width="2" class="pulse-hotspot"/>
+                <circle cx="0" cy="0" r="4" fill="#FFD600"/>
+                <text y="-18" font-size="8" fill="#F8FAFC" text-anchor="middle" font-weight="700">SCHOOL</text>
+              </g>
+              
+              <!-- No Entry Area -->
+              <g class="map-hotspot" data-id="no_entry" transform="translate(50, 125)" style="cursor: pointer;">
+                <circle cx="0" cy="0" r="14" fill="rgba(229, 57, 53, 0.15)" stroke="#E53935" stroke-width="2" class="pulse-hotspot"/>
+                <circle cx="0" cy="0" r="4" fill="#E53935"/>
+                <text y="-18" font-size="8" fill="#F8FAFC" text-anchor="middle" font-weight="700">NO ENTRY</text>
+              </g>
+              
+              <!-- No Jaywalking Area -->
+              <g class="map-hotspot" data-id="no_jaywalking" transform="translate(300, 125)" style="cursor: pointer;">
+                <circle cx="0" cy="0" r="14" fill="rgba(229, 57, 53, 0.15)" stroke="#E53935" stroke-width="2" class="pulse-hotspot"/>
+                <circle cx="0" cy="0" r="4" fill="#E53935"/>
+                <text y="-18" font-size="8" fill="#F8FAFC" text-anchor="middle" font-weight="700">NO WALK</text>
+              </g>
+              
+              <!-- Slow Down Area -->
+              <g class="map-hotspot" data-id="slow_down" transform="translate(175, 200)" style="cursor: pointer;">
+                <circle cx="0" cy="0" r="14" fill="rgba(0, 230, 118, 0.15)" stroke="#00E676" stroke-width="2" class="pulse-hotspot"/>
+                <circle cx="0" cy="0" r="4" fill="#00E676"/>
+                <text y="-18" font-size="8" fill="#F8FAFC" text-anchor="middle" font-weight="700">SLOW</text>
+              </g>
+              
+              <!-- No Bicycle Area -->
+              <g class="map-hotspot" data-id="no_bicycle" transform="translate(300, 50)" style="cursor: pointer;">
+                <circle cx="0" cy="0" r="14" fill="rgba(255, 109, 0, 0.15)" stroke="#FF6D00" stroke-width="2" class="pulse-hotspot"/>
+                <circle cx="0" cy="0" r="4" fill="#FF6D00"/>
+                <text y="-18" font-size="8" fill="#F8FAFC" text-anchor="middle" font-weight="700">NO BIKE</text>
+              </g>
+              
+              <!-- Animated Driving Car Pin -->
+              <g id="car-pin" transform="translate(175, 240)">
+                <circle cx="0" cy="0" r="10" fill="var(--color-info)" opacity="0.3" class="pulse-pin"/>
+                <polygon points="0,-8 6,6 -6,6" fill="var(--color-info)" stroke="#FFFFFF" stroke-width="1"/>
+              </g>
+            </svg>
+          </div>
+          <div class="gps-controls">
+            <button class="btn btn-primary" id="btn-gps-simulate" style="width: 100%;">🚗 Start Driving Simulation</button>
+          </div>
         </div>
 
         <!-- Demonstration Presets -->
@@ -114,8 +241,9 @@
 
           <!-- Multi-language Select Tab Bar -->
           <div class="lang-selector">
-            <button class="lang-btn active" data-lang="en">ENGLISH</button>
-            <button class="lang-btn" data-lang="lo">ລາວ (LAO)</button>
+            <button class="lang-btn" data-lang="ko">한국어 (KO)</button>
+            <button class="lang-btn" data-lang="en">ENGLISH</button>
+            <button class="lang-btn active" data-lang="lo">ລາວ (LAO)</button>
             <button class="lang-btn" data-lang="zh">中文</button>
             <button class="lang-btn" data-lang="ja">日本語</button>
           </div>
@@ -152,6 +280,33 @@
             </button>
           </div>
 
+          <!-- AI Assistant Chatbot -->
+          <div class="chatbot-section">
+            <div class="section-label">
+              <span id="chat-title">💬 AI Safety Assistant Q&A</span>
+              <span style="color: var(--color-success)" id="chat-status-text">Online</span>
+            </div>
+            
+            <div class="chat-box" id="chat-box">
+              <div class="chat-msg bot">
+                <p id="chat-welcome-msg">Hello! I am your AI Safety Assistant. Ask me anything about this traffic sign or road safety in Korea.</p>
+              </div>
+            </div>
+            
+            <div class="quick-questions" id="quick-questions">
+              <!-- Populated dynamically based on selected sign -->
+            </div>
+            
+            <div class="chat-input-area">
+              <input type="text" id="chat-input" placeholder="Ask a question..." autocomplete="off">
+              <button id="chat-send-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 3.178 4.995.002.002.26.41a.5.5 0 0 0 .886-.083l6-15Zm-1.833 1.89L6.637 10.07l-.215-.338a.5.5 0 0 0-.154-.154l-.338-.215 7.494-7.494 1.178-.471-.47 1.178Z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
         </div>
 
       </div>
@@ -159,14 +314,14 @@
     
     <!-- Right: Dashboard console for AI Prompt Engineering (The core competitive edge) -->
     <div class="dashboard-panel">
-      <div class="dashboard-title">
+      <div class="dashboard-title" id="lbl-console-title">
         <span style="color: var(--color-info)">⚙</span> AI Prompt Engineering Console
       </div>
       
       <!-- System prompt editing box -->
       <div class="console-card">
         <div class="card-title-bar">
-          <div class="card-title">
+          <div class="card-title" id="lbl-modify-prompt-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="var(--color-info)" viewBox="0 0 16 16">
               <path d="M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294l4-13zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0zm6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0z"/>
             </svg>
@@ -189,8 +344,8 @@
       <div class="console-card">
         <div class="setting-slider-group">
           <div class="slider-label">
-            <span>LLM Temperature (Creativity Index)</span>
-            <span style="color: var(--text-muted)">Low temp = stable & reliable</span>
+            <span id="lbl-temp-title">LLM Temperature (Creativity Index)</span>
+            <span style="color: var(--text-muted)" id="lbl-temp-desc">Low temp = stable & reliable</span>
           </div>
           <div class="slider-input-wrap">
             <input type="range" class="slider" id="temp-slider" min="0.0" max="1.0" step="0.1">
@@ -202,28 +357,28 @@
       <!-- AI Vision Training Lab Console Card -->
       <div class="console-card">
         <div class="card-title-bar">
-          <div class="card-title">
+          <div class="card-title" id="lbl-vision-lab-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="var(--color-orange)" viewBox="0 0 16 16">
               <path d="M4 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0m6-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0M7 8.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m2 2a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5m-7-8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m6-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0M8.5 2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m2 2a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5"/>
             </svg>
-            AI Vision Training Lab (학습 제어소)
+            <span id="lbl-vision-lab-text">AI Vision Training Lab (학습 제어소)</span>
           </div>
           <span class="card-tag" id="mobilenet-badge" style="background: rgba(255, 61, 0, 0.1); color: var(--color-danger); border-color: rgba(255, 61, 0, 0.2);">Loading ML...</span>
         </div>
         
         <div style="font-size: 11.5px; color: var(--text-secondary);">
-          MobileNet Status: <strong id="mobilenet-status" style="color: var(--color-danger)">Initializing TensorFlow...</strong>
+          <span id="lbl-mobilenet-status-prefix">MobileNet Status: </span><strong id="mobilenet-status" style="color: var(--color-danger)">Initializing TensorFlow...</strong>
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 8px;">
-          <label style="font-size: 11px; font-weight: 600; color: var(--text-muted);">SELECT SIGN TARGET CLASS</label>
+          <label style="font-size: 11px; font-weight: 600; color: var(--text-muted);" id="lbl-select-class-title">SELECT SIGN TARGET CLASS</label>
           <select id="train-class-select" class="prompt-textarea" style="height: 38px; padding: 8px; font-family: var(--font-body);">
-            <option value="stop">일시정지 (STOP)</option>
-            <option value="no_entry">진입금지 (No Entry)</option>
-            <option value="school_zone">어린이 보호구역 (School Zone)</option>
-            <option value="no_jaywalking">무단횡단 금지 (No Jaywalking)</option>
-            <option value="slow_down">서행 (Slow Down)</option>
-            <option value="no_bicycle">자전거 통행금지 (No Bicycles)</option>
+            <option value="stop" id="opt-stop">일시정지 (STOP)</option>
+            <option value="no_entry" id="opt-no-entry">진입금지 (No Entry)</option>
+            <option value="school_zone" id="opt-school-zone">어린이 보호구역 (School Zone)</option>
+            <option value="no_jaywalking" id="opt-no-jaywalking">무단횡단 금지 (No Jaywalking)</option>
+            <option value="slow_down" id="opt-slow-down">서행 (Slow Down)</option>
+            <option value="no_bicycle" id="opt-no-bicycle">자전거 통행금지 (No Bicycles)</option>
           </select>
         </div>
 
@@ -235,7 +390,7 @@
         <!-- Predict Result Bar -->
         <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
           <div style="display: flex; justify-content: space-between; font-size: 12px;">
-            <span style="font-weight: 700;">AI Vision Inference:</span>
+            <span style="font-weight: 700;" id="lbl-vision-predict-res-title">AI Vision Inference:</span>
             <span id="vision-predict-res" style="color: var(--text-muted); font-weight: 800;">Waiting for Training...</span>
           </div>
           <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
@@ -245,55 +400,55 @@
 
         <!-- Training Examples Count Grid -->
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; font-size: 10px; color: var(--text-secondary);">
-          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span>일시정지:</span> <strong id="count-stop" style="color: var(--color-info)">0</strong></div>
-          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span>진입금지:</span> <strong id="count-no_entry" style="color: var(--color-info)">0</strong></div>
-          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span>어린이보호:</span> <strong id="count-school_zone" style="color: var(--color-info)">0</strong></div>
-          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span>무단횡단:</span> <strong id="count-no_jaywalking" style="color: var(--color-info)">0</strong></div>
-          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span>서행:</span> <strong id="count-slow_down" style="color: var(--color-info)">0</strong></div>
-          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span>자전거금지:</span> <strong id="count-no_bicycle" style="color: var(--color-info)">0</strong></div>
+          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span id="lbl-count-stop">일시정지:</span> <strong id="count-stop" style="color: var(--color-info)">0</strong></div>
+          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span id="lbl-count-no_entry">진입금지:</span> <strong id="count-no_entry" style="color: var(--color-info)">0</strong></div>
+          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span id="lbl-count-school_zone">어린이보호:</span> <strong id="count-school_zone" style="color: var(--color-info)">0</strong></div>
+          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span id="lbl-count-no_jaywalking">무단횡단:</span> <strong id="count-no_jaywalking" style="color: var(--color-info)">0</strong></div>
+          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span id="lbl-count-slow_down">서행:</span> <strong id="count-slow_down" style="color: var(--color-info)">0</strong></div>
+          <div class="impact-box" style="padding: 6px 10px; display: flex; justify-content: space-between; background: rgba(255,255,255,0.01);"><span id="lbl-count-no_bicycle">자전거금지:</span> <strong id="count-no_bicycle" style="color: var(--color-info)">0</strong></div>
         </div>
       </div>
 
       <!-- Execution Feedback Log -->
       <div class="impact-box">
-        <div class="impact-title">Prompt Compilation Trace Log</div>
+        <div class="impact-title" id="lbl-trace-log-title">Prompt Compilation Trace Log</div>
         <p class="impact-desc" id="impact-desc">Initializing engine. Awaiting sign scan to execute system prompt parsing...</p>
       </div>
 
       <!-- Core Specs (for judges / presentation storytelling) -->
       <div>
-        <div class="section-label" style="margin-bottom: 12px;">App Architecture Stack</div>
+        <div class="section-label" style="margin-bottom: 12px;" id="lbl-architecture-title">App Architecture Stack</div>
         <div class="feature-list">
           
           <div class="feature-item">
             <div class="feature-icon">👁</div>
             <div class="feature-text">
-              <span class="feature-name">Client-side AI OCR (Tesseract.js)</span>
-              <span class="feature-desc">Offline neural network text extraction running directly inside the user's browser.</span>
+              <span class="feature-name" id="lbl-feat1-name">Client-side AI OCR (Tesseract.js)</span>
+              <span class="feature-desc" id="lbl-feat1-desc">Offline neural network text extraction running directly inside the user's browser.</span>
             </div>
           </div>
           
           <div class="feature-item">
             <div class="feature-icon">🤖</div>
             <div class="feature-text">
-              <span class="feature-name">Dynamic Prompt Compilation Engine</span>
-              <span class="feature-desc">Adjusts safety analysis, translation styles, and emergency alerts instantly based on custom system instructions.</span>
+              <span class="feature-name" id="lbl-feat2-name">Dynamic Prompt Compilation Engine</span>
+              <span class="feature-desc" id="lbl-feat2-desc">Adjusts safety analysis, translation styles, and emergency alerts instantly based on custom system instructions.</span>
             </div>
           </div>
 
           <div class="feature-item">
             <div class="feature-icon">🗣</div>
             <div class="feature-text">
-              <span class="feature-name">Speech Synthesis Guide (Web Speech API)</span>
-              <span class="feature-desc">Converts translations into natural speech using native local voice synthesis matching targets (EN, ZH, JA).</span>
+              <span class="feature-name" id="lbl-feat3-name">Speech Synthesis Guide (Web Speech API)</span>
+              <span class="feature-desc" id="lbl-feat3-desc">Converts translations into natural speech using native local voice synthesis matching targets (EN, ZH, JA).</span>
             </div>
           </div>
 
           <div class="feature-item">
             <div class="feature-icon">🔊</div>
             <div class="feature-text">
-              <span class="feature-name">Warning Alarm System (Web Audio API)</span>
-              <span class="feature-desc">Synthesizes custom alert sirens offline using hardware oscillators depending on sign hazard ratings.</span>
+              <span class="feature-name" id="lbl-feat4-name">Warning Alarm System (Web Audio API)</span>
+              <span class="feature-desc" id="lbl-feat4-desc">Synthesizes custom alert sirens offline using hardware oscillators depending on sign hazard ratings.</span>
             </div>
           </div>
 
