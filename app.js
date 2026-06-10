@@ -1,3 +1,10 @@
+// Transformers.js — On-device LLM (Hugging Face)
+import { pipeline, env } from '@huggingface/transformers';
+
+// Allow model caching in browser storage
+env.allowLocalModels = false;
+env.useBrowserCache = true;
+
 // State Management
 let appState = {
   selectedSign: null,
@@ -31,7 +38,15 @@ Rules:
   weather: 'clear',        // 'clear' | 'nightrain'
   isGpsSimulating: false,
   gpsInterval: null,
-  carPositionIndex: 0
+  carPositionIndex: 0,
+  
+  // Gemini API & Physics Simulator States
+  onDeviceAI: null,        // Chrome built-in AI session
+  onDeviceAIReady: false,   // whether window.ai is available
+  simSpeed: 50,
+  simMu: 0.7,
+  simSlope: 0,
+  simReaction: 1.0
 };
 
 // Default Prompt Templates for Demo
@@ -80,24 +95,7 @@ Important:
 - Always include all 4 fields
 - Keep Lao text (ພາສາລາວ) readable and natural
 - Add cultural context where helpful
-- Use emojis sparingly but effectively`,
-
-  lao: `You are a bilingual traffic safety assistant for Lao tourists visiting Korea.
-
-Primary language: ພາສາລາວ (Lao script)
-Secondary: Include Korean term in parentheses
-
-Always output these 4 fields in Lao language:
-TITLE: [ຊື່ປ້າຍ (Korean)]
-MEANING: [ຄວາມໝາຍ]
-INSTRUCTION: [ສິ່ງທີ່ຕ້ອງເຮັດ / ຫ້າມເຮັດ]
-PENALTY: [ຄ່າປັບ ຫຼື ຜົນສະທ້ອນທາງກົດໝາຍ]
-
-Critical rules:
-- Use only genuine Lao script, not transliteration
-- Keep sentences short (under 20 words each)
-- Always mention 어린이 보호구역 as ເຂດປ້ອງກັນເດັກ
-- Always mention 일시정지 as ຢຸດຊົ່ວຄາວ`
+- Use emojis sparingly but effectively`
 };
 
 // Web Audio API Warning Sound Generator
@@ -600,6 +598,44 @@ function updatePhoneUI() {
   if (btnGpsSim) {
     btnGpsSim.textContent = appState.isGpsSimulating ? ui.gpsSimStop : ui.gpsSimStart;
   }
+
+  // Translate Simulator UI tags
+  const simLabel = document.getElementById('simulator-label-text');
+  if (simLabel) simLabel.textContent = ui.simulatorTitle;
+  const simSpeedLabel = document.getElementById('lbl-sim-speed');
+  if (simSpeedLabel) simSpeedLabel.textContent = ui.simSpeedLabel + ':';
+  const simRoadLabel = document.getElementById('lbl-sim-road');
+  if (simRoadLabel) simRoadLabel.textContent = ui.simRoadLabel + ':';
+  const simSlopeLabel = document.getElementById('lbl-sim-slope');
+  if (simSlopeLabel) simSlopeLabel.textContent = ui.simSlopeLabel + ':';
+  const simReactionLabel = document.getElementById('lbl-sim-reaction');
+  if (simReactionLabel) simReactionLabel.textContent = ui.simReactionLabel + ':';
+
+  // Road Condition Buttons
+  const roadDry = document.getElementById('sim-road-dry');
+  if (roadDry) roadDry.textContent = ui.simDry;
+  const roadWet = document.getElementById('sim-road-wet');
+  if (roadWet) roadWet.textContent = ui.simWet;
+  const roadIcy = document.getElementById('sim-road-icy');
+  if (roadIcy) roadIcy.textContent = ui.simIcy;
+
+  // Result Labels
+  const resReactionLabel = document.getElementById('lbl-res-reaction');
+  if (resReactionLabel) resReactionLabel.textContent = ui.simResultReaction;
+  const resBrakingLabel = document.getElementById('lbl-res-braking');
+  if (resBrakingLabel) resBrakingLabel.textContent = ui.simResultBraking;
+  const resTotalLabel = document.getElementById('lbl-res-total');
+  if (resTotalLabel) resTotalLabel.textContent = ui.simResultTotal;
+
+  // Inner Visualization labels
+  const visReactionShort = document.getElementById('lbl-vis-reaction-short');
+  if (visReactionShort) visReactionShort.textContent = ui.simVisReaction;
+  const visBrakingShort = document.getElementById('lbl-vis-braking-short');
+  if (visBrakingShort) visBrakingShort.textContent = ui.simVisBraking;
+
+  // Explainer button
+  const aiExplainBtn = document.getElementById('btn-sim-ai-explain');
+  if (aiExplainBtn) aiExplainBtn.textContent = ui.simAiExplainBtn;
 }
 
 // --- Global UI Translations for Dashboard & Outer Elements ---
@@ -611,7 +647,6 @@ const GLOBAL_UI_TRANSLATIONS = {
     promptPlaceholder: '여기에 안전 지침 및 어조 요구사항을 설정하세요...',
     strictBtn: '🚨 엄격한 경고 어조',
     friendlyBtn: '😊 친절한 관광 가이드',
-    laoBtn: '🇱🇦 라오어 집중 모드',
     tempLabel: 'LLM 온도 (창의성 지수)',
     tempMuted: '낮은 온도 = 안정적이고 일관됨',
     visionLabTitle: 'AI 비전 트레이닝 랩 (학습 제어소)',
@@ -638,7 +673,15 @@ const GLOBAL_UI_TRANSLATIONS = {
     feature3Name: '음성 합성 가이드 (Web Speech API)',
     feature3Desc: '대상 언어(영어, 중국어, 일본어 등)와 일치하는 기본 음성 합성을 사용하여 번역 내용을 자연스러운 음성으로 변환합니다.',
     feature4Name: '위험 경고 사이렌 시스템 (Web Audio API)',
-    feature4Desc: '표지판의 위험도 등급에 따라 하드웨어 발진기(Oscillator)를 사용하여 오프라인에서 경고 사이렌을 직접 합성합니다.'
+    feature4Desc: '표지판의 위험도 등급에 따라 하드웨어 발진기(Oscillator)를 사용하여 오프라인에서 경고 사이렌을 직접 합성합니다.',
+    
+    // API
+    apiSettingsTitle: '🔑 Gemini API 설정',
+    apiStatusMissing: 'API 키 없음',
+    apiStatusConfigured: '실시간 AI 활성화',
+    apiKeyPlaceholder: 'Gemini API Key 입력...',
+    apiSaveBtn: '저장',
+    apiKeyDesc: 'API Key는 로컬 브라우저(LocalStorage)에만 안전하게 보관됩니다.'
   },
   en: {
     consoleTitle: '⚙ AI Prompt Engineering Console',
@@ -647,7 +690,6 @@ const GLOBAL_UI_TRANSLATIONS = {
     promptPlaceholder: 'Configure safety guidelines and tone requirements here...',
     strictBtn: '🚨 Strict Alert Tone',
     friendlyBtn: '😊 Warm Tour Guide',
-    laoBtn: '🇱🇦 Lao Focus',
     tempLabel: 'LLM Temperature (Creativity Index)',
     tempMuted: 'Low temp = stable & reliable',
     visionLabTitle: 'AI Vision Training Lab (학습 제어소)',
@@ -668,13 +710,21 @@ const GLOBAL_UI_TRANSLATIONS = {
     traceLogInit: 'Initializing engine. Awaiting sign scan to execute system prompt parsing...',
     architectureStackTitle: 'App Architecture Stack',
     feature1Name: 'Client-side AI OCR (Tesseract.js)',
-    feature1Desc: 'Offline neural network text extraction running directly inside the user\'s browser.',
+    feature1Desc: 'Offline neural network text extraction running directly inside the user's browser.',
     feature2Name: 'Dynamic Prompt Compilation Engine',
     feature2Desc: 'Adjusts safety analysis, translation styles, and emergency alerts instantly based on custom system instructions.',
     feature3Name: 'Speech Synthesis Guide (Web Speech API)',
     feature3Desc: 'Converts translations into natural speech using native local voice synthesis matching targets (EN, ZH, JA).',
     feature4Name: 'Warning Alarm System (Web Audio API)',
-    feature4Desc: 'Synthesizes custom alert sirens offline using hardware oscillators depending on sign hazard ratings.'
+    feature4Desc: 'Synthesizes custom alert sirens offline using hardware oscillators depending on sign hazard ratings.',
+    
+    // API
+    apiSettingsTitle: '🔑 Gemini API Settings',
+    apiStatusMissing: 'Missing Key',
+    apiStatusConfigured: 'Live AI Active',
+    apiKeyPlaceholder: 'Enter Gemini API Key...',
+    apiSaveBtn: 'Save',
+    apiKeyDesc: 'API Key is stored locally in your browser (LocalStorage).'
   },
   lo: {
     consoleTitle: '⚙ ຄອນໂຊນການກຳນົດຄຳສັ່ງ AI Prompt',
@@ -683,7 +733,6 @@ const GLOBAL_UI_TRANSLATIONS = {
     promptPlaceholder: 'ກຳນົດຄ່າແນວທາງຄວາມປອດໄພ ແລະ ໂທນສຽງຢູ່ບ່ອນນີ້...',
     strictBtn: '🚨 ໂທນເຕືອນໄພເຂັ້ມງວດ',
     friendlyBtn: '😊 ຜູ້ແນະນຳການທ່ອງທ່ຽວທີ່ເປັນມິດ',
-    laoBtn: '🇱🇦 ເນັ້ນພາສາລາວ',
     tempLabel: 'ອຸນຫະພູມ LLM (ດັດຊະນີຄວາມຄິດສ້າງສັນ)',
     tempMuted: 'ອຸນຫະພູມຕ່ຳ = ສະຖຽນ & ເຊື່ອຖືໄດ້',
     visionLabTitle: 'ຫ້ອງທົດລອງການຝຶກອົບຮົມ AI Vision',
@@ -710,7 +759,101 @@ const GLOBAL_UI_TRANSLATIONS = {
     feature3Name: 'ຄູ່ມືການສັງເຄາະສຽງ (Web Speech API)',
     feature3Desc: 'ແປງຂໍ້ຄວາມແປເປັນສຽງເວົ້າທີ່ເປັນທຳມະຊາດໂດຍໃຊ້ການສັງເຄາະສຽງທ້ອງຖິ່ນໃຫ້ກົງກັບເປົ້າໝາຍ.',
     feature4Name: 'ລະບົບເຕືອນໄພສຽງ (Web Audio API)',
-    feature4Desc: 'ສັງເຄາະສຽງເຕືອນໄພສຸກເສີນແບບອອຟລາຍໂດຍໃຊ້ hardware oscillators ອີງຕາມລະດັບຄວາມອັນຕະລາຍ.'
+    feature4Desc: 'ສັງເຄາະສຽງເຕືອນໄພສຸກເສີນແບບອອຟລາຍໂດຍໃຊ້ hardware oscillators ອີງຕາມລະດັບຄວາມອັນຕະລາຍ.',
+    
+    // API
+    apiSettingsTitle: '🔑 ການຕັ້ງຄ່າ Gemini API',
+    apiStatusMissing: 'ບໍ່ມີຄີ API',
+    apiStatusConfigured: 'AI ເຮັດວຽກຕົວຈິງ',
+    apiKeyPlaceholder: 'ປ້ອນຄີ Gemini API...',
+    apiSaveBtn: 'ບັນທຶກ',
+    apiKeyDesc: 'ຄີ API ຈະຖືກເກັບໄວ້ຢ່າງປອດໄພໃນບຣາວເຊີທ້ອງຖິ່ນ (LocalStorage).'
+  },
+  zh: {
+    consoleTitle: '⚙ AI 提示词工程控制台',
+    modifySystemPrompt: '修改系统提示词 (指令)',
+    resetBtn: '重置',
+    promptPlaceholder: '在此配置安全指南和语气要求...',
+    strictBtn: '🚨 严厉警告语气',
+    friendlyBtn: '😊 亲切导游语气',
+    tempLabel: 'LLM 温度 (创造力指数)',
+    tempMuted: '低温 = 稳定和一致',
+    visionLabTitle: 'AI 视觉训练实验室 (学习控制所)',
+    mlLoading: 'ML 加载中...',
+    mlStatus: 'MobileNet 状态:',
+    selectTargetClass: '选择训练目标标志类别',
+    trainWebcamBtn: '📸 训练摄像头画面',
+    trainDatasetBtn: '🚀 训练真实照片',
+    inferenceLabel: 'AI 视觉推理结果:',
+    waitingTraining: '等待训练...',
+    countStop: '停止:',
+    countNoEntry: '禁止驶入:',
+    countSchoolZone: '儿童保护:',
+    countNoJaywalking: '禁止横穿:',
+    countSlowDown: '慢行:',
+    countNoBicycle: '自行车禁止:',
+    traceLogTitle: '提示词编译执行日志',
+    traceLogInit: '正在初始化引擎。等待扫描标志以执行系统提示词解析...',
+    architectureStackTitle: '应用架构技术栈',
+    feature1Name: '客户端 AI OCR (Tesseract.js)',
+    feature1Desc: '直接在用户浏览器中运行的离线神经网络文本提取技术。',
+    feature2Name: '动态提示词编译引擎',
+    feature2Desc: '根据自定义系统指令即时调整安全分析、翻译风格和紧急警告。',
+    feature3Name: '语音合成向导 (Web Speech API)',
+    feature3Desc: '使用与目标语言（英语、中文、日语等）匹配的本地语音合成，将翻译内容转换为自然语音。',
+    feature4Name: '危险警报合成器 (Web Audio API)',
+    feature4Desc: '根据标志危险等级，使用硬件振荡器在线下直接合成警报声。',
+    
+    // API
+    apiSettingsTitle: '🔑 Gemini API 设置',
+    apiStatusMissing: '未设置密钥',
+    apiStatusConfigured: '实时 AI 已激活',
+    apiKeyPlaceholder: '输入 Gemini API Key...',
+    apiSaveBtn: '保存',
+    apiKeyDesc: 'API 密钥仅保存在本地浏览器 (LocalStorage) 中。'
+  },
+  ja: {
+    consoleTitle: '⚙ AI プロンプトエンジニアリングコンソール',
+    modifySystemPrompt: 'システムプロンプト (指示) の変更',
+    resetBtn: '初期化',
+    promptPlaceholder: 'ここに安全ガイドラインとトーンの要件を設定します...',
+    strictBtn: '🚨 厳格な警告トーン',
+    friendlyBtn: '😊 親切な観光ガイド',
+    tempLabel: 'LLM 温度 (創造性指数)',
+    tempMuted: '低い温度 = 安定して一貫している',
+    visionLabTitle: 'AI ビジョントレーニングラボ (学習制御所)',
+    mlLoading: 'ML ロード中...',
+    mlStatus: 'MobileNet ステータス:',
+    selectTargetClass: 'トレーニング対象標識の選択',
+    trainWebcamBtn: '📸 ウェブカメラ画像の学習',
+    trainDatasetBtn: '🚀 実際の写真の学習',
+    inferenceLabel: 'AI ビジョン推論結果:',
+    waitingTraining: '学習待ち...',
+    countStop: '一時停止:',
+    countNoEntry: '進入禁止:',
+    countSchoolZone: '児童保護:',
+    countNoJaywalking: '横断禁止:',
+    countSlowDown: '徐行:',
+    countNoBicycle: '自転車禁止:',
+    traceLogTitle: 'プロンプトコンパイル実行ログ',
+    traceLogInit: 'エンジン初期化中。標識スキャンを待ってシステムプロンプトの解析を実行します...',
+    architectureStackTitle: 'アプリアーキテクチャスタック',
+    feature1Name: 'クライアントサイド AI OCR (Tesseract.js)',
+    feature1Desc: 'ユーザーのブラウザ内で直接実行されるオフラインのニューラルネットワークテキスト抽出技術。',
+    feature2Name: '動的プロンプトコンパイルエンジン',
+    feature2Desc: 'カスタムシステム指示に基づいて、安全分析、翻訳スタイル、および緊急警告を即座に調整します。',
+    feature3Name: '音声合成ガイド (Web Speech API)',
+    feature3Desc: '対象言語（英語、中国語、日本語など）に一致するローカル音声合成を使用して、翻訳内容を自然な音声に変換します。',
+    feature4Name: '危険警告サイレンシステム (Web Audio API)',
+    feature4Desc: '標識の危険度レベルに応じて、ハードウェア発振器を用いてオフラインで警告音を直接合成します。',
+    
+    // API
+    apiSettingsTitle: '🔑 Gemini API 設定',
+    apiStatusMissing: 'APIキー未設定',
+    apiStatusConfigured: 'リアルタイムAI有効',
+    apiKeyPlaceholder: 'Gemini API Key を入力...',
+    apiSaveBtn: '保存',
+    apiKeyDesc: 'API キーはブラウザのローカル（LocalStorage）にのみ安全に保存されます。'
   }
 };
 
@@ -871,6 +1014,21 @@ function updateGlobalUI() {
       btn.classList.remove('active');
     }
   });
+
+  // Gemini API Key Console Card translations
+  const apiTitle = document.getElementById('lbl-api-title-text');
+  if (apiTitle) apiTitle.textContent = ui.apiSettingsTitle || '🔑 Gemini API Settings';
+  const apiSaveBtn = document.getElementById('btn-save-api-key');
+  if (apiSaveBtn) apiSaveBtn.textContent = ui.apiSaveBtn || 'Save';
+  const apiKeyInput = document.getElementById('api-key-input');
+  if (apiKeyInput) apiKeyInput.placeholder = ui.apiKeyPlaceholder || 'Enter Gemini API Key...';
+  const apiKeyDesc = document.getElementById('lbl-api-key-desc');
+  if (apiKeyDesc) apiKeyDesc.textContent = ui.apiKeyDesc || 'API Key is stored locally in your browser.';
+  
+  // Update badge text based on state
+  if (typeof updateApiBadgeUI === 'function') {
+    updateApiBadgeUI();
+  }
 }
 
 // UI Rendering
@@ -1512,16 +1670,6 @@ document.addEventListener('DOMContentLoaded', () => {
     appState.systemPrompt = PROMPT_TEMPLATES.friendly;
     renderTranslation();
   });
-
-  document.getElementById('btn-template-lao').addEventListener('click', () => {
-    promptTextarea.value = PROMPT_TEMPLATES.lao;
-    appState.systemPrompt = PROMPT_TEMPLATES.lao;
-    document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
-    const laoBtn = document.querySelector('.lang-btn[data-lang="lo"]');
-    if (laoBtn) laoBtn.classList.add('active');
-    appState.activeLang = 'lo';
-    renderTranslation();
-  });
   
   // Speaker Play Trigger
   document.getElementById('speaker-btn').addEventListener('click', () => {
@@ -1597,6 +1745,80 @@ document.addEventListener('DOMContentLoaded', () => {
       renderTranslation();
     });
   });
+
+  // NEW: Clipboard Copy button
+  const copyBtn = document.getElementById('btn-copy-translation');
+  if (copyBtn) copyBtn.addEventListener('click', copyTranslation);
+
+  // NEW: Pronunciation Guide toggle
+  const pronToggle = document.getElementById('pronunciation-toggle');
+  if (pronToggle) pronToggle.addEventListener('click', togglePronunciation);
+
+  // NEW: Comparison View toggle
+  const compareToggle = document.getElementById('compare-toggle');
+  if (compareToggle) compareToggle.addEventListener('click', toggleCompare);
+
+  // NEW: Gemini API Key save button
+  const saveApiKeyBtn = document.getElementById('btn-save-api-key');
+  if (saveApiKeyBtn) saveApiKeyBtn.addEventListener('click', saveGeminiApiKey);
+
+  // NEW: Simulator Toggle
+  const simToggle = document.getElementById('simulator-toggle');
+  if (simToggle) simToggle.addEventListener('click', toggleSimulator);
+
+  // NEW: Simulator Input Event Listeners
+  const simSpeedSlider = document.getElementById('sim-speed-slider');
+  if (simSpeedSlider) {
+    simSpeedSlider.addEventListener('input', (e) => {
+      appState.simSpeed = parseInt(e.target.value);
+      document.getElementById('sim-speed-val').textContent = `${appState.simSpeed} km/h`;
+      calculateStoppingDistance();
+    });
+  }
+
+  const simReactionSlider = document.getElementById('sim-reaction-slider');
+  if (simReactionSlider) {
+    simReactionSlider.addEventListener('input', (e) => {
+      appState.simReaction = parseFloat(e.target.value);
+      document.getElementById('sim-reaction-val').textContent = `${appState.simReaction.toFixed(1)} sec`;
+      calculateStoppingDistance();
+    });
+  }
+
+  const simSlopeSlider = document.getElementById('sim-slope-slider');
+  if (simSlopeSlider) {
+    simSlopeSlider.addEventListener('input', (e) => {
+      appState.simSlope = parseInt(e.target.value);
+      const valText = appState.simSlope === 0 ? 'Flat (0%)' : (appState.simSlope > 0 ? `Uphill (+${appState.simSlope}%)` : `Downhill (${appState.simSlope}%)`);
+      document.getElementById('sim-slope-val').textContent = valText;
+      calculateStoppingDistance();
+    });
+  }
+
+  // Road Condition Buttons
+  const roadDryBtn = document.getElementById('sim-road-dry');
+  const roadWetBtn = document.getElementById('sim-road-wet');
+  const roadIcyBtn = document.getElementById('sim-road-icy');
+
+  const updateRoadSelection = (mu, activeBtn) => {
+    appState.simMu = mu;
+    [roadDryBtn, roadWetBtn, roadIcyBtn].forEach(btn => {
+      if (btn) btn.classList.remove('active');
+    });
+    if (activeBtn) activeBtn.classList.add('active');
+    calculateStoppingDistance();
+  };
+
+  if (roadDryBtn) roadDryBtn.addEventListener('click', () => updateRoadSelection(0.7, roadDryBtn));
+  if (roadWetBtn) roadWetBtn.addEventListener('click', () => updateRoadSelection(0.4, roadWetBtn));
+  if (roadIcyBtn) roadIcyBtn.addEventListener('click', () => updateRoadSelection(0.1, roadIcyBtn));
+
+  // Explainer button
+  const aiExplainBtn = document.getElementById('btn-sim-ai-explain');
+  if (aiExplainBtn) aiExplainBtn.addEventListener('click', explainStoppingPhysicsWithAI);
+
+  // Initialize Chrome On-device AI (window.ai)
+  initOnDeviceAI();
 
   // Initial Global UI Translate
   updateGlobalUI();
@@ -2277,36 +2499,175 @@ function handleChatSubmit(text) {
   if (!text || !appState.selectedSign) return;
   
   const chatBox = document.getElementById('chat-box');
+  const sign = appState.selectedSign;
+  const lang = appState.activeLang;
   
   const userMsg = document.createElement('div');
   userMsg.className = 'chat-msg user';
   userMsg.innerHTML = `<p>${text}</p>`;
   chatBox.appendChild(userMsg);
-  
   chatBox.scrollTop = chatBox.scrollHeight;
   
   const thinkingMsg = document.createElement('div');
   thinkingMsg.className = 'chat-msg bot thinking';
-  thinkingMsg.innerHTML = `<p>Typing...</p>`;
+  thinkingMsg.innerHTML = `<p>🤖 AI가 생각 중...</p>`;
   chatBox.appendChild(thinkingMsg);
   chatBox.scrollTop = chatBox.scrollHeight;
   
-  setTimeout(() => {
-    thinkingMsg.remove();
-    
-    const botAnswer = getChatbotReply(
-      text, 
-      appState.selectedSign, 
-      appState.activeLang, 
-      appState.systemPrompt
+  if (appState.onDeviceAIReady && _tfPipeline) {
+    // Use Transformers.js on-device AI
+    const signTrans = sign.translations[lang] || sign.translations['en'];
+    const systemPrompt = `You are a multilingual Korean traffic safety assistant.
+Sign: "${sign.name}" | Lang: ${lang} | Title: ${signTrans.title} | Meaning: ${signTrans.meaning} | Penalty: ${signTrans.penalty}.
+Always respond in the language matching code "${lang}". Be concise and helpful. Use emojis when appropriate.`;
+
+    runTransformersAI(systemPrompt, text)
+      .then(reply => {
+        thinkingMsg.remove();
+        const botMsg = document.createElement('div');
+        botMsg.className = 'chat-msg bot';
+        botMsg.innerHTML = `<p>${reply.replace(/\n/g, '<br>')}</p>`;
+        chatBox.appendChild(botMsg);
+        chatBox.scrollTop = chatBox.scrollHeight;
+        playWarningSound('low');
+      })
+      .catch(err => {
+        console.warn('Transformers.js error, falling back:', err);
+        thinkingMsg.remove();
+        const botAnswer = getChatbotReply(text, sign, lang, appState.systemPrompt);
+        const botMsg = document.createElement('div');
+        botMsg.className = 'chat-msg bot';
+        botMsg.innerHTML = `<p>${botAnswer}</p>`;
+        chatBox.appendChild(botMsg);
+        chatBox.scrollTop = chatBox.scrollHeight;
+        playWarningSound('low');
+      });
+  } else {
+    // Fallback: rule-based simulation
+    setTimeout(() => {
+      thinkingMsg.remove();
+      const botAnswer = getChatbotReply(text, sign, lang, appState.systemPrompt);
+      const botMsg = document.createElement('div');
+      botMsg.className = 'chat-msg bot';
+      botMsg.innerHTML = `<p>${botAnswer}</p>`;
+      chatBox.appendChild(botMsg);
+      chatBox.scrollTop = chatBox.scrollHeight;
+      playWarningSound('low');
+    }, 600);
+  }
+}
+
+// ==========================================
+// Transformers.js On-Device AI (Qwen2.5-0.5B)
+// ==========================================
+
+let _tfPipeline = null; // cached pipeline instance
+
+async function initOnDeviceAI() {
+  const badge       = document.getElementById('api-status-badge');
+  const desc        = document.getElementById('ai-status-desc');
+  const progressWrap = document.getElementById('ai-download-progress');
+  const progressBar  = document.getElementById('ai-progress-bar');
+  const progressLbl  = document.getElementById('ai-progress-label');
+
+  if (badge) {
+    badge.textContent = '모델 로딩 중...';
+    badge.style.background = 'rgba(255,193,7,0.15)';
+    badge.style.color = '#FFC107';
+    badge.style.borderColor = 'rgba(255,193,7,0.3)';
+  }
+  if (desc) desc.textContent = 'Qwen2.5-0.5B 모델을 준비하는 중입니다 (최초 실행 시 ~300MB 다운로드)...';
+  if (progressWrap) progressWrap.style.display = 'block';
+
+  try {
+    _tfPipeline = await pipeline(
+      'text-generation',
+      'onnx-community/Qwen2.5-0.5B-Instruct',
+      {
+        dtype: 'q4',
+        progress_callback: (info) => {
+          if (info.status === 'progress' && info.total) {
+            const pct = Math.round((info.loaded / info.total) * 100);
+            if (progressBar) progressBar.style.width = `${pct}%`;
+            if (progressLbl) progressLbl.textContent = `${info.file || '모델'} 다운로드 중... ${pct}%`;
+          }
+        }
+      }
     );
-    
-    const botMsg = document.createElement('div');
-    botMsg.className = 'chat-msg bot';
-    botMsg.innerHTML = `<p>${botAnswer}</p>`;
-    chatBox.appendChild(botMsg);
-    
-    chatBox.scrollTop = chatBox.scrollHeight;
-    playWarningSound('low');
-  }, 600);
+
+    appState.onDeviceAIReady = true;
+
+    if (progressWrap) progressWrap.style.display = 'none';
+    if (badge) {
+      badge.textContent = '🟢 Qwen2.5 AI 활성';
+      badge.style.background = 'rgba(0,230,118,0.1)';
+      badge.style.color = 'var(--color-success)';
+      badge.style.borderColor = 'rgba(0,230,118,0.2)';
+    }
+    if (desc) {
+      desc.innerHTML = `✅ <b>Qwen2.5-0.5B</b> 모델이 이 기기에서 직접 실행 중입니다.<br>
+      <span style="color:var(--text-muted); font-size:10px;">브라우저에 캐시됨 — 다음 방문부터 즉시 로딩됩니다.</span>`;
+    }
+    console.log('✅ Transformers.js (Qwen2.5-0.5B-Instruct) ready');
+
+  } catch (err) {
+    console.error('Transformers.js init failed:', err);
+    if (progressWrap) progressWrap.style.display = 'none';
+    if (badge) {
+      badge.textContent = '⚠️ 시뮬레이션 모드';
+      badge.style.background = 'rgba(255,193,7,0.1)';
+      badge.style.color = '#FFC107';
+      badge.style.borderColor = 'rgba(255,193,7,0.2)';
+    }
+    if (desc) {
+      desc.innerHTML = `⚠️ AI 모델 로딩 실패 — 규칙 기반 시뮬레이션으로 동작합니다.<br>
+      <span style="color:var(--text-muted); font-size:10px;">${err.message}</span>`;
+    }
+    appState.onDeviceAIReady = false;
+  }
+}
+
+async function runTransformersAI(systemPrompt, userInput) {
+  if (!_tfPipeline) throw new Error('Pipeline not initialized');
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user',   content: userInput }
+  ];
+
+  const output = await _tfPipeline(messages, {
+    max_new_tokens: 256,
+    temperature: 0.7,
+    do_sample: true,
+    repetition_penalty: 1.1,
+  });
+
+  const generated = output[0]?.generated_text;
+  if (Array.isArray(generated)) {
+    const last = generated[generated.length - 1];
+    return last?.content || '';
+  }
+  return String(generated || '').trim();
+}
+
+async function explainStoppingPhysicsWithAI() {
+  const lang  = appState.activeLang;
+  const speed = appState.simSpeed;
+  const mu    = appState.simMu;
+  const slope = appState.simSlope;
+  const reactionTime = appState.simReactionTime;
+
+  const v  = speed / 3.6;
+  const g  = 9.8;
+  const G  = slope / 100;
+  const dr = (v * reactionTime).toFixed(1);
+  const db = (v * v / (2 * g * (mu + G))).toFixed(1);
+  const total = (parseFloat(dr) + parseFloat(db)).toFixed(1);
+  const roadLabel = mu >= 0.6 ? 'Dry(건조)' : mu >= 0.3 ? 'Wet(습윤)' : 'Icy(결빙)';
+
+  const prompt = `Speed: ${speed} km/h | Road: ${roadLabel} (μ=${mu}) | Slope: ${slope}% | Reaction: ${reactionTime}s
+→ Reaction dist: ${dr}m + Braking dist: ${db}m = Total: ${total}m
+Explain with physics (Ek=½mv², friction F=μmg, W=Fd) in "${lang}" language. Use emojis. 3-5 sentences.`;
+
+  handleChatSubmit(`🔬 물리 분석: ${speed}km/h, ${roadLabel}, 총 ${total}m 필요`);
 }

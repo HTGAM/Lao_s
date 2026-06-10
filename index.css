@@ -1300,3 +1300,506 @@ header {
     inset 0 1px 1px rgba(255, 255, 255, 0.2);
 }
 
+/* ==========================================
+   NEW FEATURES: Translation Site Inspired
+   ========================================== */
+
+/* --- Copy Button --- */
+.trans-box-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.btn-copy {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.btn-copy:hover {
+  background: rgba(0, 176, 255, 0.12);
+  border-color: rgba(0, 176, 255, 0.3);
+  color: var(--color-info);
+  transform: scale(1.05);
+}
+
+.btn-copy.copied {
+  background: rgba(0, 230, 118, 0.15);
+  border-color: rgba(0, 230, 118, 0.4);
+  color: var(--color-success);
+  animation: copyPulse 0.4s ease;
+}
+
+@keyframes copyPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* --- Toast Notification --- */
+.toast-container {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  background: rgba(22, 28, 45, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  color: var(--text-primary);
+  padding: 12px 20px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(0, 230, 118, 0.1);
+  animation: toastIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.toast.toast-out {
+  animation: toastOut 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(10px) scale(0.95); }
+}
+
+/* --- Pronunciation Guide Panel --- */
+.pronunciation-panel {
+  background: rgba(101, 31, 255, 0.06);
+  border: 1px solid rgba(101, 31, 255, 0.15);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.pronunciation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  user-select: none;
+}
+
+.pronunciation-header:hover {
+  background: rgba(101, 31, 255, 0.08);
+}
+
+.pronunciation-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Toggle Switch */
+.pronunciation-switch {
+  display: flex;
+  align-items: center;
+}
+
+.switch-track {
+  width: 36px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.25s ease;
+}
+
+.switch-track.active {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-info));
+}
+
+.switch-thumb {
+  width: 16px;
+  height: 16px;
+  background: #FFFFFF;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.switch-track.active .switch-thumb {
+  transform: translateX(16px);
+}
+
+.pronunciation-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s ease;
+  padding: 0 14px;
+}
+
+.pronunciation-body.open {
+  max-height: 200px;
+  padding: 0 14px 14px 14px;
+}
+
+.pronunciation-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.pronunciation-item:last-child {
+  margin-bottom: 0;
+}
+
+.pronunciation-field {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pronunciation-text {
+  font-size: 13px;
+  color: var(--color-primary);
+  font-weight: 500;
+  font-style: italic;
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+}
+
+/* --- Multi-language Comparison Panel --- */
+.compare-panel {
+  background: rgba(0, 176, 255, 0.04);
+  border: 1px solid rgba(0, 176, 255, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.compare-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  user-select: none;
+}
+
+.compare-header:hover {
+  background: rgba(0, 176, 255, 0.06);
+}
+
+.compare-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compare-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.3s ease;
+}
+
+.compare-chevron.open {
+  transform: rotate(180deg);
+}
+
+.compare-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.compare-body.open {
+  max-height: 800px;
+}
+
+.compare-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px 12px;
+}
+
+.compare-card {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.compare-card:hover {
+  border-color: rgba(0, 176, 255, 0.2);
+  background: rgba(0, 176, 255, 0.04);
+}
+
+.compare-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.compare-card-lang {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-info);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compare-card-copy {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 11px;
+}
+
+.compare-card-copy:hover {
+  background: rgba(0, 176, 255, 0.12);
+  border-color: rgba(0, 176, 255, 0.3);
+  color: var(--color-info);
+}
+
+.compare-card-copy.copied {
+  color: var(--color-success);
+  border-color: rgba(0, 230, 118, 0.4);
+}
+
+.compare-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.compare-card-meaning {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ==========================================
+   NEW FEATURES: Physics Simulator & Gemini API Settings
+   ========================================== */
+
+#simulator-panel {
+  background: rgba(244, 63, 94, 0.04);
+  border: 1px solid rgba(244, 63, 94, 0.12);
+  margin-top: 10px;
+}
+
+#simulator-toggle:hover {
+  background: rgba(244, 63, 94, 0.06);
+}
+
+.sim-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 14px 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sim-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sim-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.sim-control-label {
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.sim-control-val {
+  font-weight: 800;
+  color: var(--color-info);
+}
+
+.sim-btn-group {
+  display: flex;
+  gap: 6px;
+}
+
+.sim-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sim-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.sim-btn.active {
+  background: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.5);
+  color: #FFFFFF;
+}
+
+.sim-outputs {
+  padding: 12px 14px;
+}
+
+.sim-vis-container {
+  margin: 8px 0 16px 0;
+}
+
+.sim-vis-track {
+  width: 100%;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  position: relative;
+  display: flex;
+  overflow: visible;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sim-vis-bar {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sim-vis-bar.reaction-bar {
+  background: linear-gradient(90deg, rgba(0, 176, 255, 0.25), rgba(0, 176, 255, 0.45));
+  border-radius: 11px 0 0 11px;
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.sim-vis-bar.braking-bar {
+  background: linear-gradient(90deg, rgba(244, 63, 94, 0.25), rgba(244, 63, 94, 0.5));
+  border-radius: 0 11px 11px 0;
+}
+
+.vis-label-inner {
+  font-size: 9px;
+  font-weight: 800;
+  color: #FFFFFF;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sim-car-icon {
+  position: absolute;
+  top: -4px;
+  font-size: 16px;
+  transform: translateX(-50%);
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.sim-result-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.sim-result-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.sim-result-row.total-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.sim-result-label {
+  font-weight: 500;
+}
+
+.sim-result-value {
+  font-weight: 700;
+}
+
+#api-status-badge.configured {
+  background: rgba(0, 230, 118, 0.1) !important;
+  color: var(--color-success) !important;
+  border-color: rgba(0, 230, 118, 0.2) !important;
+}
+
+

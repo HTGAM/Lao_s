@@ -16,6 +16,14 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.4/dist/knn-classifier.min.js"></script>
+  <!-- Transformers.js (Hugging Face — On-device LLM inference via WASM/WebGPU) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.2/dist/transformers.min.js"
+      }
+    }
+  </script>
 </head>
 <body>
 
@@ -250,10 +258,40 @@
 
           <!-- Translation Output Details -->
           <div class="trans-box">
-            <div class="trans-title" id="trans-title">STOP</div>
+            <div class="trans-box-header">
+              <div class="trans-title" id="trans-title">STOP</div>
+              <button class="btn-copy" id="btn-copy-translation" title="Copy Translation">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" id="copy-icon">
+                  <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                  <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                </svg>
+              </button>
+            </div>
             <div class="trans-meaning" id="trans-meaning">Complete Stop Required</div>
             <p class="trans-desc" id="trans-desc">You must come to a complete stop before the crosswalk or intersection. Proceed only after checking for pedestrians.</p>
             <div class="trans-penalty" id="trans-penalty">Violation carries a fine and penalty points.</div>
+          </div>
+
+          <!-- Pronunciation Guide Toggle Panel -->
+          <div class="pronunciation-panel" id="pronunciation-panel">
+            <div class="pronunciation-header" id="pronunciation-toggle">
+              <span class="pronunciation-label">🔤 <span id="pronunciation-label-text">Pronunciation Guide</span></span>
+              <div class="pronunciation-switch">
+                <div class="switch-track" id="switch-track">
+                  <div class="switch-thumb"></div>
+                </div>
+              </div>
+            </div>
+            <div class="pronunciation-body" id="pronunciation-body">
+              <div class="pronunciation-item">
+                <span class="pronunciation-field" id="pron-field-title">Title:</span>
+                <span class="pronunciation-text" id="pron-title">—</span>
+              </div>
+              <div class="pronunciation-item">
+                <span class="pronunciation-field" id="pron-field-instruction">Instruction:</span>
+                <span class="pronunciation-text" id="pron-instruction">—</span>
+              </div>
+            </div>
           </div>
 
           <!-- Voice Synthesis Control Bar -->
@@ -280,7 +318,110 @@
             </button>
           </div>
 
+          <!-- Multi-language Comparison View -->
+          <div class="compare-panel" id="compare-panel">
+            <div class="compare-header" id="compare-toggle">
+              <span class="compare-label">🌐 <span id="compare-label-text">Compare All Languages</span></span>
+              <span class="compare-chevron" id="compare-chevron">▼</span>
+            </div>
+            <div class="compare-body" id="compare-body">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Stopping Distance Simulator -->
+          <div class="compare-panel" id="simulator-panel">
+            <div class="compare-header" id="simulator-toggle">
+              <span class="compare-label">🚗 <span id="simulator-label-text">Stopping Distance Simulator</span></span>
+              <span class="compare-chevron" id="simulator-chevron">▼</span>
+            </div>
+            <div class="compare-body" id="simulator-body" style="padding-top: 10px;">
+              <!-- Dynamic Calculation Controls -->
+              <div class="sim-controls">
+                
+                <!-- Speed Slider -->
+                <div class="sim-control-group">
+                  <div class="sim-label-row">
+                    <span class="sim-control-label" id="lbl-sim-speed">Speed:</span>
+                    <span class="sim-control-val" id="sim-speed-val">50 km/h</span>
+                  </div>
+                  <input type="range" class="slider" id="sim-speed-slider" min="10" max="100" step="5" value="50">
+                </div>
+
+                <!-- Road Condition Buttons -->
+                <div class="sim-control-group">
+                  <div class="sim-label-row">
+                    <span class="sim-control-label" id="lbl-sim-road">Road Condition:</span>
+                  </div>
+                  <div class="sim-btn-group">
+                    <button class="sim-btn active" id="sim-road-dry" data-mu="0.7">Dry</button>
+                    <button class="sim-btn" id="sim-road-wet" data-mu="0.4">Wet</button>
+                    <button class="sim-btn" id="sim-road-icy" data-mu="0.1">Icy</button>
+                  </div>
+                </div>
+
+                <!-- Road Slope / Gradient -->
+                <div class="sim-control-group">
+                  <div class="sim-label-row">
+                    <span class="sim-control-label" id="lbl-sim-slope">Road Grade (Slope):</span>
+                    <span class="sim-control-val" id="sim-slope-val">Flat (0%)</span>
+                  </div>
+                  <input type="range" class="slider" id="sim-slope-slider" min="-10" max="10" step="5" value="0">
+                </div>
+
+                <!-- Reaction Time -->
+                <div class="sim-control-group">
+                  <div class="sim-label-row">
+                    <span class="sim-control-label" id="lbl-sim-reaction">Reaction Time:</span>
+                    <span class="sim-control-val" id="sim-reaction-val">1.0 sec</span>
+                  </div>
+                  <input type="range" class="slider" id="sim-reaction-slider" min="0.5" max="2.5" step="0.1" value="1.0">
+                </div>
+
+              </div>
+
+              <!-- Simulator Outputs / Visualization -->
+              <div class="sim-outputs">
+                <!-- Physics Visualization Track -->
+                <div class="sim-vis-container">
+                  <div class="sim-vis-track">
+                    <div class="sim-vis-bar reaction-bar" id="vis-reaction-bar" style="width: 30%;">
+                      <span class="vis-label-inner" id="lbl-vis-reaction-short">Reaction</span>
+                    </div>
+                    <div class="sim-vis-bar braking-bar" id="vis-braking-bar" style="width: 50%;">
+                      <span class="vis-label-inner" id="lbl-vis-braking-short">Braking</span>
+                    </div>
+                    <div class="sim-car-icon" id="sim-car-icon">🚗</div>
+                  </div>
+                </div>
+
+                <!-- Physics Equation Result Table -->
+                <div class="sim-result-table">
+                  <div class="sim-result-row">
+                    <span class="sim-result-label" id="lbl-res-reaction">reaction distance</span>
+                    <span class="sim-result-value" id="res-reaction-val">13.9 m</span>
+                  </div>
+                  <div class="sim-result-row">
+                    <span class="sim-result-label" id="lbl-res-braking">braking distance</span>
+                    <span class="sim-result-value" id="res-braking-val">19.8 m</span>
+                  </div>
+                  <div class="sim-result-row total-row">
+                    <span class="sim-result-label" id="lbl-res-total" style="font-weight: 700;">TOTAL STOPPING DISTANCE</span>
+                    <span class="sim-result-value" id="res-total-val" style="font-weight: 800; color: var(--color-danger)">33.7 m</span>
+                  </div>
+                </div>
+
+                <!-- AI Explainer Button -->
+                <button class="btn btn-primary" id="btn-sim-ai-explain" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, var(--color-orange), var(--color-danger)); border: none; padding: 10px; font-size: 11px;">
+                  💡 AI 물리 분석 요청 (Analyze stopping physics with AI)
+                </button>
+              </div>
+
+            </div>
+          </div>
+
           <!-- AI Assistant Chatbot -->
+
           <div class="chatbot-section">
             <div class="section-label">
               <span id="chat-title">💬 AI Safety Assistant Q&A</span>
@@ -336,7 +477,6 @@
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="btn" style="flex-grow: 1; padding: 8px; font-size: 11px;" id="btn-template-warning">🚨 Strict Alert Tone</button>
           <button class="btn" style="flex-grow: 1; padding: 8px; font-size: 11px;" id="btn-template-friendly">😊 Warm Tour Guide</button>
-          <button class="btn" style="flex-grow: 1; padding: 8px; font-size: 11px; background: linear-gradient(135deg, rgba(206,115,37,0.25), rgba(206,115,37,0.1)); border-color: rgba(206,115,37,0.4); color: #F5A623;" id="btn-template-lao">🇱🇦 Lao Focus</button>
         </div>
       </div>
       
@@ -354,7 +494,30 @@
         </div>
       </div>
 
+      <!-- Chrome Built-in AI Status Card -->
+      <div class="console-card">
+        <div class="card-title-bar">
+          <div class="card-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="var(--color-info)" viewBox="0 0 16 16">
+              <path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM4.5 7.5a.5.5 0 0 0 0 1h5.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5H4.5z"/>
+            </svg>
+            <span>🤖 On-device AI (Gemini Nano)</span>
+          </div>
+          <span class="card-tag" id="api-status-badge" style="background: rgba(255,193,7,0.1); color: #FFC107; border-color: rgba(255,193,7,0.25);">Checking...</span>
+        </div>
+        <div id="ai-status-desc" style="font-size: 11px; color: var(--text-secondary); line-height: 1.5; margin-top: 4px;">
+          Chrome 내장 Gemini Nano AI를 감지하는 중입니다...
+        </div>
+        <div id="ai-download-progress" style="display:none; margin-top: 8px;">
+          <div style="width:100%; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;">
+            <div id="ai-progress-bar" style="height:100%; width:0%; background: linear-gradient(90deg, var(--color-info), var(--color-primary)); transition: width 0.3s ease;"></div>
+          </div>
+          <span id="ai-progress-label" style="font-size:10px; color:var(--text-muted); margin-top:4px; display:block;">모델 다운로드 중...</span>
+        </div>
+      </div>
+
       <!-- AI Vision Training Lab Console Card -->
+
       <div class="console-card">
         <div class="card-title-bar">
           <div class="card-title" id="lbl-vision-lab-title">
@@ -459,8 +622,11 @@
 
   </div>
 
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
   <!-- Javascript Modules -->
   <script src="signs.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

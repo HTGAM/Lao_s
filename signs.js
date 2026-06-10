@@ -28,6 +28,10 @@ const TRAFFIC_SIGNS = [
           a2: "네, 승용차 기준 6만 원의 범칙금과 15점의 벌점이 부과됩니다.",
           q3: "주변에 차나 보행자가 없어도 멈춰야 하나요?",
           a3: "네, 시야에 보행자나 다른 차량이 전혀 보이지 않더라도 일시정지 표지판이 있으면 무조건 완전히 정지해야 합니다."
+        },
+        romanization: {
+          title: 'il-si-jeong-ji',
+          instruction: 'hoeng-dan-bo-do-na gyo-cha-ro jik-jeon-e cha-ryang-eul wan-jeon-hi meom-chu-eo-ya ham-ni-da.'
         }
       },
       en: {
@@ -58,6 +62,10 @@ const TRAFFIC_SIGNS = [
           a2: "ລົດທົ່ວໄປຈະຖືກປັບໃໝ 60,000 ວອນ ແລະ ຫັກຄະແນນໃບຂັບຂີ່ 15 ຄະແນນ.",
           q3: "ຖ້າບໍ່ມີຄົນຍ່າງເດ?",
           a3: "ທ່ານຍັງຕ້ອງຢຸດລົດຢ່າງສົມບູນ ເຖິງແມ່ນວ່າຈະບໍ່ມີຄົນຍ່າງ ຫຼື ລົດຄັນອື່ນກໍຕາມ."
+        },
+        romanization: {
+          title: 'yut',
+          instruction: 'thaan tawng yut lot hai sa-nit kawn thaang maa laai. doen-thaang taw pai dai lang jaak kuat-sawp khwaam plawt-phai.'
         }
       },
       zh: {
@@ -73,6 +81,10 @@ const TRAFFIC_SIGNS = [
           a2: "普通客车处以60,000韩元罚款，并扣除15分驾照分数。",
           q3: "没有车辆和行人也必须停车吗？",
           a3: "是的，即使视线范围内没有车辆或行人，也必须遵守一时停止规定。"
+        },
+        romanization: {
+          title: 'yī shí tíng zhǐ',
+          instruction: 'zài jiāo chā lù kǒu huò rén xíng héng dào qián bì xū wán quán tíng chē.'
         }
       },
       ja: {
@@ -88,6 +100,10 @@ const TRAFFIC_SIGNS = [
           a2: "普通車で6,000円（60,000 KRW）の反則金と、15点の大幅な点数加算となります。",
           q3: "誰もいなくても止まる必要がありますか？",
           a3: "はい、歩行者や他の車がいなくても一時停止線手前での完全停止が必要です。"
+        },
+        romanization: {
+          title: 'ichiji teishi',
+          instruction: 'kōsaten ya ōdanhodō no temae de kanarazu kanzen ni teishi shite kudasai.'
         }
       }
     }
@@ -120,6 +136,10 @@ const TRAFFIC_SIGNS = [
           a2: "지시위반으로 승용차 기준 6만 원의 범칙금이 부과되며, 사고 발생 시 가해자로서 민형사상 엄중한 책임을 집니다.",
           q3: "실수로 진입한 경우 어떻게 해야 하나요?",
           a3: "즉시 정차 후 비상등을 켜고, 뒤에서 오는 차량이 없는 안전한 상태를 확인하면서 천천히 후진하여 빠져나와야 합니다."
+        },
+        romanization: {
+          title: 'jin-ip-geum-ji',
+          instruction: 'i bang-hyang-eu-ro-neun cha-ryang-i jin-ip-hal su eops-seum-ni-da.'
         }
       },
       en: {
@@ -150,6 +170,10 @@ const TRAFFIC_SIGNS = [
           a2: "ຈະຖືກປັບໃໝ 60,000 ວອນ ແລະ ຕ້ອງຮັບຜິດຊອບ 100% ຫາກເກີດອຸປະຕິເຫດ.",
           q3: "ຖ້າຫຼົງເຂົ້າໄປໂດຍບໍ່ໄດ້ຕັ້ງໃຈເດ?",
           a3: "ຢຸດລົດທັນທີ, ເປີດໄຟສຸກເສີນ, ແລະ ຖອຍລົດອອກມາຢ່າງປອດໄພເມື່ອທາງວ່າງ."
+        },
+        romanization: {
+          title: 'haam khao',
+          instruction: 'baw a-nu-nyaat hai nyaan-pha-ha-na dai dai khao pai nai thit-thaang nii.'
         }
       },
       zh: {
@@ -165,6 +189,10 @@ const TRAFFIC_SIGNS = [
           a2: "罚款60,000韩元，且在逆行引发的事故中需承担全部法律责任。",
           q3: "不小心驶入该怎么办？",
           a3: "请立即停车，开启双闪警示灯，在确保后方安全的前提下迅速倒车驶离。"
+        },
+        romanization: {
+          title: 'jìn zhǐ shǐ rù',
+          instruction: 'chē liàng bù dé cóng cǐ fāng xiàng shǐ rù.'
         }
       },
       ja: {
@@ -180,6 +208,10 @@ const TRAFFIC_SIGNS = [
           a2: "普通車で6,000円（60,000 KRW）の反則金が科され、事故発生時の過失割合は100%となります。",
           q3: "誤って進入した場合は？",
           a3: "直ちに停車してハザードランプを点滅させ、後方の安全を十分に確認しながらバックで退出してください。"
+        },
+        romanization: {
+          title: 'shinnyū kinshi',
+          instruction: 'kono hōkō kara wa sharyō no shinnyū ga dekimasen.'
         }
       }
     }
@@ -222,6 +254,10 @@ const TRAFFIC_SIGNS = [
           a2: "오전 8시부터 오후 8시 사이에 속도위반, 신호위반, 주정차 위반 시 범칙금과 벌점이 일반 도로의 2배로 가중 처벌됩니다.",
           q3: "사고가 발생하면 어떻게 되나요?",
           a3: "일명 민식법에 의해 어린이 보호구역 내에서 상해 사고 유발 시 최소 1년 이상의 징역 또는 벌금형에 처해지는 가중 처벌이 적용됩니다."
+        },
+        romanization: {
+          title: 'eo-rin-i bo-ho-gu-yeok',
+          instruction: 'jeuk-si gam-sok-ha-sip-si-o. je-han sok-do-neun si-sok 30km i-ha.'
         }
       },
       en: {
@@ -252,6 +288,10 @@ const TRAFFIC_SIGNS = [
           a2: "ຄ່າປັບໃໝ ແລະ ຄະແນນໃບຂັບຂີ່ຈະຖືກເພີ່ມຂຶ້ນເປັນ 2 ເທົ່າ ສຳລັບການລະເມີດໃນລະຫວ່າງເວລາ 8:00 ຫາ 20:00 ໂມງ.",
           q3: "ຫາກເກີດອຸປະຕິເຫດຕຳເດັກນ້ອຍຈະເປັນແນວໃດ?",
           a3: "ພາຍໃຕ້ກົດໝາຍເກົາຫຼີ, ການເຮັດໃຫ້ເດັກນ້ອຍບາດເຈັບໃນເຂດນີ້ມີໂທດຈຳຄຸກຢ່າງໜ້ອຍ 1 ປີ ຫຼື ປັບໃໝສູງຫຼາຍ."
+        },
+        romanization: {
+          title: 'khet pawng-kan dek',
+          instruction: 'lut khwaam wai long than-thii. jam-kat khwaam wai yuu thii 30 km/sm.'
         }
       },
       zh: {
@@ -267,6 +307,10 @@ const TRAFFIC_SIGNS = [
           a2: "在早8点至晚8点之间发生超速、违停等行为，罚款及扣分均按普通路段的双倍执行。",
           q3: "如果在该区域撞伤儿童会怎样？",
           a3: "根据韩国法律（民植法），在儿童保护区内撞伤儿童将被判处1年以上有期徒刑，性质非常严重。"
+        },
+        romanization: {
+          title: 'ér tóng bǎo hù qū',
+          instruction: 'qǐng lì jí jiǎn sù. xiàn sù 30 gōng lǐ yǐ xià.'
         }
       },
       ja: {
@@ -282,6 +326,10 @@ const TRAFFIC_SIGNS = [
           a2: "午前8時から午後8時の間の違反は、罰金と減点点数が通常の2倍になります。",
           q3: "人身事故を起こした場合は？",
           a3: "韓国の法律（ミンシク法）により、学童区域内で子供に怪我をさせた場合、1年以上の懲役または重い罰金刑が科されます。"
+        },
+        romanization: {
+          title: 'gakudō yōgo kuiki',
+          instruction: 'tadachi ni gensoku shite kudasai. seigen sokudo wa jisoku 30km ika.'
         }
       }
     }
@@ -322,6 +370,10 @@ const TRAFFIC_SIGNS = [
           a2: "네, 무단횡단 시 경찰 단속이나 신고를 통해 2만 원에서 3만 원의 범칙금이 보행자에게 부과될 수 있습니다.",
           q3: "횡단보도는 주로 어디에 있나요?",
           a3: "좌우를 둘러보시면 대개 100~200미터 이내에 횡단보도나 육교, 지하보도가 위치해 있습니다."
+        },
+        romanization: {
+          title: 'mu-dan-hoeng-dan geum-ji',
+          instruction: 'i do-ro-reul geo-reo-seo geon-neo-ji ma-sip-si-o.'
         }
       },
       en: {
@@ -352,6 +404,10 @@ const TRAFFIC_SIGNS = [
           a2: "ມີ, ຄົນຍ່າງທີ່ຂ້າມທາງຊະຊາຍຈະຖືກປັບໃໝ 20,000 ຫາ 30,000 ວອນ ໂດຍເຈົ້າໜ້າທີ່ຕຳຫຼວດ.",
           q3: "ທາງມ້າລາຍທີ່ໃກ້ທີ່ສຸດຢູ່ໃສ?",
           a3: "ກວດເບິ່ງຊ້າຍ ແລະ ຂວາ. ໂດຍທົ່ວໄປ ທາງມ້າລາຍ ຫຼື ອຸໂມງຂ້າມທາງຈະຢູ່ຫ່າງອອກໄປປະມານ 100-200 ແມັດ."
+        },
+        romanization: {
+          title: 'haam khaam thaang sa-saai',
+          instruction: 'haam khaam thaang yuu bawn nii phaw pen an-ta-laai laai.'
         }
       },
       zh: {
@@ -367,6 +423,10 @@ const TRAFFIC_SIGNS = [
           a2: "是的，被警察发现或被行车记录仪举报将面临20,000至30,000韩元的罚款。",
           q3: "人行横道一般在哪里？",
           a3: "左右环顾。在韩国，人行横道或地下通道通常分布在100至200米以内。"
+        },
+        romanization: {
+          title: 'jìn zhǐ shàn zì héng chuān',
+          instruction: 'jìn zhǐ zài cǐ chù héng chuān mǎ lù.'
         }
       },
       ja: {
@@ -382,6 +442,10 @@ const TRAFFIC_SIGNS = [
           a2: "はい、取り締まりの対象となり、20,000〜30,000 KRWの反則金が科されます。",
           q3: "近くの横断歩道はどこにありますか？",
           a3: "左右を確認してください。通常100〜200m以内に横断歩道、または地下道や歩道橋が設置されています。"
+        },
+        romanization: {
+          title: 'hokōsha ōdan kinshi',
+          instruction: 'koko de wa dōro wo ōdan shinaide kudasai.'
         }
       }
     }
@@ -414,6 +478,10 @@ const TRAFFIC_SIGNS = [
           a2: "신호등이 없는 교차로, 좁은 골목길 어귀, 급격한 굽은 도로 등 시야가 잘 확보되지 않는 위험 구간에 주로 설치됩니다.",
           q3: "일시정지와의 차이점은 무엇인가요?",
           a3: "일시정지는 무조건 바퀴를 완전히 멈춰 서야(0 km/h) 하지만, 서행은 안전이 확보되었다면 서서히 서서히 굴러가며 진행해도 무방합니다."
+        },
+        romanization: {
+          title: 'seo-haeng',
+          instruction: 'dol-bal sang-hwang si cha-ryang-eul jeuk-si meom-chul su it-neun neu-rin sok-do-ro un-haeng-ha-sip-si-o.'
         }
       },
       en: {
@@ -444,6 +512,10 @@ const TRAFFIC_SIGNS = [
           a2: "ໂດຍທົ່ວໄປແມ່ນຢູ່ທາງໂຄ້ງແຄບ, ທາງແຍກທີ່ເບິ່ງບໍ່ເຫັນດີ, ແລະ ທາງຄົດງໍ.",
           q3: "ມັນຕ່າງຈາກປ້າຍ 'ຢຸດ' ແນວໃດ?",
           a3: "ປ້າຍ 'ຢຸດ' ບັງຄັບໃຫ້ຢຸດ 0 ກມ/ຊມ ສະເໝີ. ສ່ວນ 'ຂັບຊ້າໆ' ແມ່ນສາມາດເຄື່ອນທີ່ໄປຊ້າໆໄດ້ຖ້າປອດໄພ."
+        },
+        romanization: {
+          title: 'khap saa-saa',
+          instruction: 'thaan tawng khap khii duai khwaam wai thii saa-maat yut lot dai than-thii.'
         }
       },
       zh: {
@@ -459,6 +531,10 @@ const TRAFFIC_SIGNS = [
           a2: "多设在视线不良的无信号灯交叉路口、急弯路口或狭窄巷道出口。",
           q3: "它和“一时停止(STOP)”有什么区别？",
           a3: "一时停止要求无论有无车辆都必须彻底停稳。慢行则允许在确认安全的前提下以极慢速度滑行通过。"
+        },
+        romanization: {
+          title: 'màn xíng',
+          instruction: 'bì xū yǐ néng ràng chē liàng lì jí tíng zhǐ de huǎn màn sù dù xíng shǐ.'
         }
       },
       ja: {
@@ -474,6 +550,10 @@ const TRAFFIC_SIGNS = [
           a2: "信号のない見通しの悪い交差点、狭い道路の曲がり角、下り坂の急勾配などに設置されます。",
           q3: "一時停止との違いは何ですか？",
           a3: "一時停止は必ず速度を0にして完全に止まる必要がありますが、徐行は安全が確認できていれば、いつでも止まれる極低速で動き続けても構いません。"
+        },
+        romanization: {
+          title: 'jokō',
+          instruction: 'sharyō ga tadachi ni teishi dekiru kiwamete osoi sokudo de sōkō shite kudasai.'
         }
       }
     }
@@ -522,6 +602,10 @@ const TRAFFIC_SIGNS = [
           a2: "평균 시속 70~80km 이상으로 차량이 질주하는 자동차 전용도로 또는 위험 교량 구간이기 때문에 자전거 진입을 법으로 금지하고 있습니다.",
           q3: "범칙금은 얼마인가요?",
           a3: "자전거는 1만 원, 전동킥보드는 3만 원의 범칙금이 경찰 단속 시 부과됩니다."
+        },
+        romanization: {
+          title: 'ja-jeon-geo tong-haeng-geum-ji',
+          instruction: 'ja-jeon-geo, kik-bo-deu deung-ui gae-in-hyeong i-dong-jang-chi tong-haeng-i geum-ji-doen do-ro.'
         }
       },
       en: {
@@ -552,6 +636,10 @@ const TRAFFIC_SIGNS = [
           a2: "ເນື່ອງຈາກທາງນີ້ເປັນທາງດ່ວນ ຫຼື ທາງສະເພາະລົດໃຫຍ່ ທີ່ມີຄວາມໄວສູງ. ຂັບຂີ່ລົດຖີບຈະເປັນອັນຕະລາຍຫຼາຍ.",
           q3: "ຄ່າປັບໃໝເທົ່າໃດ?",
           a3: "ລົດຖີບຈະຖືກປັບໃໝ 10,000 ວອນ, ສ່ວນສະກູດເຕີໄຟຟ້າຈະຖືກປັບໃໝ 30,000 ວອນ ຫາກຝ່າຝືນເຂົ້າທາງສະເພາະລົດໃຫຍ່."
+        },
+        romanization: {
+          title: 'haam lot thiip phaan',
+          instruction: 'baw a-nu-nyaat hai lot thiip lae u-pa-kawn kheuean-thii suaan tua phaan bawn nii.'
         }
       },
       zh: {
@@ -567,6 +655,10 @@ const TRAFFIC_SIGNS = [
           a2: "该路段为高架路、隧道或汽车专用道，车流平均时速超过70公里，非机动车进入极易发生致命车祸。",
           q3: "处罚的标准是什么？",
           a3: "自行车处以10,000韩元罚款，电动滑板车等处以30,000韩元罚款，并会被强制扣离现场。"
+        },
+        romanization: {
+          title: 'jìn zhǐ zì xíng chē tōng xíng',
+          instruction: 'jìn zhǐ zì xíng chē, diàn dòng huá bǎn chē děng tōng xíng.'
         }
       },
       ja: {
@@ -582,6 +674,10 @@ const TRAFFIC_SIGNS = [
           a2: "この先は自動車専用道路やバイパスなど、車の速度が非常に速い道路であるため、自転車等の進入は極めて危険だからです。",
           q3: "罰金はいくらですか？",
           a3: "自転車の違反は10,000 KRW、電動キックボードなどの違反は30,000 KRWの反則金が科されます。"
+        },
+        romanization: {
+          title: 'jitensha tsūkō dome',
+          instruction: 'jitensha ya kojin-gata idō sōchi no tsūkō ga kinshi sarete imasu.'
         }
       }
     }
